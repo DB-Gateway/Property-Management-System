@@ -669,6 +669,53 @@ class GatewaySystemTest extends TestCase
             ->assertSee('Not completed');
     }
 
+    public function test_dealer_can_review_completed_workflow_details_representatives_and_attachments(): void
+    {
+        $dealer = $this->dealer();
+        $dealerUser = User::factory()->create(['dealer_id' => $dealer->id, 'role' => 'dealer']);
+        $dialA = User::factory()->create(['role' => 'dial_a', 'name' => 'Assigned Dial-A']);
+        $propertyRequest = $this->propertyRequest($dealer, $dealerUser);
+
+        $propertyRequest->update([
+            'assigned_support_id' => $dialA->id,
+            'inspection_date' => '2026-09-10',
+            'inspection_start_time' => '08:15:00',
+            'representative_1' => 'Inspection Representative',
+            'inspection_completed_at' => '2026-09-10 10:30:00',
+            'work_order_start_date' => '2026-09-11',
+            'work_order_start_time' => '09:00:00',
+            'work_order_representatives' => ['Work Representative'],
+            'work_order_completed_at' => '2026-09-11 16:45:00',
+            'service_report_completed_at' => '2026-09-12 11:20:00',
+            'completed_at' => '2026-09-12 11:25:00',
+            'status' => 'completed',
+        ]);
+
+        foreach (['inspection', 'work_order', 'service_report'] as $category) {
+            $propertyRequest->attachments()->create([
+                'category' => $category,
+                'path' => "request-attachments/{$category}/{$category}.pdf",
+                'original_name' => "{$category}.pdf",
+                'mime_type' => 'application/pdf',
+                'size' => 100,
+            ]);
+        }
+
+        $this->actingAs($dealerUser)->get(route('requests.show', $propertyRequest))
+            ->assertOk()
+            ->assertSee('Completed Request Record')
+            ->assertSee('Assigned Dial-A')
+            ->assertSee('Inspection Representative')
+            ->assertSee('Work Representative')
+            ->assertSee('Sep 10, 2026 10:30 AM')
+            ->assertSee('Sep 11, 2026 04:45 PM')
+            ->assertSee('Sep 12, 2026 11:20 AM')
+            ->assertSee('Sep 12, 2026 11:25 AM')
+            ->assertSee('inspection.pdf')
+            ->assertSee('work_order.pdf')
+            ->assertSee('service_report.pdf');
+    }
+
     public function test_dealer_request_auto_assigns_to_designated_dial_lead_and_dial_lead_conducts_with_representatives(): void
     {
         $dealer = $this->dealer();

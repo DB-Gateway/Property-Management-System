@@ -13,7 +13,9 @@
     #export-requests,
     .requests-actions,
     #requests-filter-form,
-    #requests-panel > .pagination-wrap { display: none !important; }
+    #requests-panel > .pagination-wrap,
+    .requests-print-summary,
+    .requests-heading { display: none !important; }
 
     .main-area { min-height: 0; margin: 0; }
     .page-content { padding: 0; }

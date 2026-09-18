@@ -15,7 +15,7 @@ class PropertyRequest extends Model
     protected $fillable = [
         'reference_no', 'dealer_id', 'dealer_name', 'submitted_by', 'assigned_support_id', 'assigned_manager_id',
         'submitter_name', 'designation', 'branch', 'area', 'request_type',
-        'priority', 'description', 'request_date', 'due_date', 'approved_date', 'inspection_date', 'inspection_end_date',
+        'priority', 'priority_remarks', 'description', 'request_date', 'due_date', 'approved_date', 'inspection_date', 'inspection_end_date',
         'inspection_start_time', 'inspection_end_time',
         'representative_1', 'representative_2', 'representative_3', 'inspection_completed_at',
         'work_order_start_date', 'work_order_end_date', 'work_order_start_time', 'work_order_end_time', 'work_order_representatives', 'work_order_completed_at',

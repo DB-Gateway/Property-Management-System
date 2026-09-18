@@ -36,6 +36,9 @@
         @media print {
             body { background: #fff; }
             .print-actions { display: none; }
+            .directory-head { display: none; }
+            .filters { display: none; }
+            .result-count { display: none; }
             .directory-page { width: 100%; min-height: auto; margin: 0; padding: 0; }
             thead { display: table-header-group; }
             tr { break-inside: avoid; }
@@ -55,8 +58,6 @@
                 <div class="brand-subtitle">PROPERTY MANAGEMENT SYSTEM</div>
             </div>
             <div class="directory-title">
-                <h1>Dealer Directory</h1>
-                <p>Generated {{ now()->format('F d, Y · h:i A') }}</p>
             </div>
         </header>
 

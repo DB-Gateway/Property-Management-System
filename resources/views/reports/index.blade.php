@@ -14,6 +14,50 @@
 </div>
 
 <section class="panel report-filter-panel">
+    @php
+        $stageFilter = $filters['stage'] ?? '';
+        $statusFilter = $filters['status'] ?? '';
+        $hasStageOrStatusFilter = (!empty($stageFilter) && $stageFilter !== 'all') || (!empty($statusFilter) && $statusFilter !== 'all' && (request()->has('status') || $statusFilter !== 'completed'));
+    @endphp
+
+    @if($hasStageOrStatusFilter)
+        <div class="rfg-quick-filter-banner" id="rfg-quick-filter-banner">
+            <div class="rfg-qfb-left">
+                <span class="rfg-qfb-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                    Quick Filter Active:
+                </span>
+                <span class="rfg-qfb-badge">
+                    @if(!empty($stageFilter) && $stageFilter !== 'all')
+                        <span class="rfg-qfb-stage">{{ ucfirst(str_replace('_', ' ', $stageFilter)) }}</span>
+                        @if(!empty($statusFilter) && $statusFilter !== 'all')
+                            <span class="rfg-qfb-sep">&rsaquo;</span>
+                        @endif
+                    @endif
+                    @if(!empty($statusFilter) && $statusFilter !== 'all')
+                        <span class="rfg-qfb-status">
+                            @if($statusFilter === 'not_acknowledged')
+                                For Acknowledgement
+                            @elseif($statusFilter === 'aging')
+                                Aging Request
+                            @elseif($statusFilter === 'on_going')
+                                On-going
+                            @else
+                                {{ ucfirst(str_replace('_', ' ', $statusFilter)) }}
+                            @endif
+                        </span>
+                    @endif
+                </span>
+                <span class="rfg-qfb-count">({{ number_format($requests->total()) }} {{ Str::plural('result', $requests->total()) }})</span>
+            </div>
+            <a class="rfg-qfb-clear" href="{{ route('reports.index', array_merge(request()->except(['page', 'stage', 'status']), ['status' => 'all'])) }}" data-clear-quick-filter title="Clear this stage/status filter">
+                <span>&times;</span> Clear Quick Filter
+            </a>
+        </div>
+    @endif
+
     <form class="report-filter-grid" id="report-filter-form" data-cascading-filter-form method="GET" action="{{ route('reports.index') }}">
         {{-- Row 1 --}}
         <div class="rfg-field rfg-search {{ !empty($filters['search']) ? 'is-active' : '' }}" title="Search by reference, dealer, requester, or type">
@@ -83,7 +127,21 @@
             <input id="period_month" type="month" name="period_month" value="{{ $filters['period_month'] ?? now()->format('Y-m') }}" data-date-period-input aria-label="Calendar month" required @disabled(($filters['date_period'] ?? 'month') !== 'month')>
         </div>
 
-        <div class="rfg-field rfg-status {{ !empty($filters['status']) ? 'is-active' : '' }}" title="Status">
+        <div class="rfg-field rfg-stage {{ !empty($filters['stage']) && $filters['stage'] !== 'all' ? 'is-active' : '' }}" title="Workflow Stage">
+            <span class="rfg-icon-box" aria-hidden="true">
+                <svg class="rfg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+            </span>
+            <select id="stage" name="stage" aria-label="Workflow Stage">
+                <option value="">All Stages</option>
+                <option value="inspection" @selected(($filters['stage'] ?? '') === 'inspection')>Inspection</option>
+                <option value="work_order" @selected(($filters['stage'] ?? '') === 'work_order')>Work Order</option>
+                <option value="service_report" @selected(($filters['stage'] ?? '') === 'service_report')>Service Report</option>
+            </select>
+        </div>
+
+        <div class="rfg-field rfg-status {{ !empty($filters['status']) && $filters['status'] !== 'all' ? 'is-active' : '' }}" title="Status">
             <span class="rfg-icon-box" aria-hidden="true">
                 <svg class="rfg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -91,11 +149,12 @@
                 </svg>
             </span>
             <select id="status" name="status" aria-label="Status">
-                <option value="">All Statuses</option>
-                <option value="on_going" @selected(($filters['status'] ?? '') === 'on_going' || ($filters['status'] ?? '') === 'in_progress')>On-going</option>
+                <option value="all" @selected(($filters['status'] ?? '') === 'all')>All Statuses</option>
                 <option value="pending" @selected(($filters['status'] ?? '') === 'pending')>Pending</option>
+                <option value="on_going" @selected(($filters['status'] ?? '') === 'on_going' || ($filters['status'] ?? '') === 'in_progress')>On-going</option>
                 <option value="not_acknowledged" @selected(in_array($filters['status'] ?? '', ['not_acknowledged', 'for_acknowledgement'], true))>For Acknowledgement</option>
                 <option value="completed" @selected(($filters['status'] ?? '') === 'completed')>Completed</option>
+                <option value="aging" @selected(in_array($filters['status'] ?? '', ['aging', 'overdue'], true))>Aging Request</option>
             </select>
         </div>
 
@@ -115,32 +174,23 @@
         </div>
 
         {{-- Row 2 --}}
-        <div class="rfg-field rfg-branch {{ !empty($filters['branch']) ? 'is-active' : '' }}" title="Branch">
-            <span class="rfg-icon-box" aria-hidden="true">
-                <svg class="rfg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-            </span>
-            <select id="branch" name="branch" data-cascading="branch" data-default-label="All Branches" aria-label="Branch">
-                <option value="">All Branches</option>
-                @foreach($branches as $branch)
-                    <option value="{{ $branch }}" @selected(($filters['branch'] ?? '') === $branch)>{{ $branch }}</option>
-                @endforeach
-            </select>
-        </div>
-
-        <div class="rfg-field rfg-area {{ !empty($filters['area']) ? 'is-active' : '' }}" title="Area">
+        <div class="rfg-field rfg-area {{ (!empty($filters['area']) || !empty($filters['branch'])) ? 'is-active' : '' }}" title="Branch / Area">
             <span class="rfg-icon-box" aria-hidden="true">
                 <svg class="rfg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                     <circle cx="12" cy="10" r="3"></circle>
                 </svg>
             </span>
-            <select id="area" name="area" data-cascading="area" data-default-label="All Areas" aria-label="Area">
+            <select id="area" name="area" data-cascading="combined-area" data-default-label="All Areas" aria-label="Branch / Area">
                 <option value="">All Areas</option>
-                @foreach($areas as $area)
-                    <option value="{{ $area }}" @selected(($filters['area'] ?? '') === $area)>{{ $area }}</option>
+                @foreach($areasWithCities as $areaOption => $cityList)
+                    <optgroup label="{{ $areaOption }}">
+                        <option value="{{ $areaOption }}" @selected(($selectedAreaRaw ?? '') === $areaOption || ($selectedArea === $areaOption && empty($selectedBranch)))>{{ $areaOption }} (All)</option>
+                        @foreach($cityList as $cityOption)
+                            <?php $combinedVal = $cityOption.' - '.$areaOption; ?>
+                            <option value="{{ $combinedVal }}" @selected(($selectedAreaRaw ?? '') === $combinedVal || ($selectedBranch === $cityOption && $selectedArea === $areaOption))>{{ $combinedVal }}</option>
+                        @endforeach
+                    </optgroup>
                 @endforeach
             </select>
         </div>
@@ -174,21 +224,6 @@
             </select>
         </div>
 
-        <div class="rfg-field rfg-support {{ !empty($filters['assigned_support_id']) ? 'is-active' : '' }}" title="Assigned PM Support">
-            <span class="rfg-icon-box" aria-hidden="true">
-                <svg class="rfg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-            </span>
-            <select id="assigned_support_id" name="assigned_support_id" aria-label="Assigned PM Support">
-                <option value="">All Support</option>
-                @foreach($supportUsers as $support)
-                    <option value="{{ $support->id }}" @selected((string) ($filters['assigned_support_id'] ?? '') === (string) $support->id)>{{ $support->name }}</option>
-                @endforeach
-            </select>
-        </div>
-
         <div class="rfg-actions">
             <button class="button button-primary rfg-btn rfg-btn-submit" type="submit" title="Apply filters">
                 <svg class="rfg-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -196,14 +231,15 @@
                 </svg>
                 <span>Filter</span>
             </button>
-            @php
+            <?php
                 $hasCustomFilters = collect($filters)->contains(function ($val, $key) {
                     if ($val === null || $val === '') return false;
                     if ($key === 'date_period' && $val === 'month') return false;
                     if ($key === 'period_month' && $val === now()->format('Y-m')) return false;
+                    if ($key === 'status' && $val === 'completed' && !request()->has('status')) return false;
                     return true;
                 });
-            @endphp
+            ?>
             <a class="button button-light rfg-btn rfg-btn-reset {{ $hasCustomFilters ? 'has-active' : '' }}" href="{{ route('reports.index') }}" title="Clear all filters">
                 <svg class="rfg-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="1 4 1 10 7 10"></polyline>

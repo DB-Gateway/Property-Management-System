@@ -7,6 +7,7 @@ use App\Models\Dealer;
 use App\Models\PropertyRequest;
 use App\Models\RequestAttachment;
 use App\Models\User;
+use App\Services\RequestNotificationService;
 use App\Support\SimpleXlsxWriter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
@@ -155,6 +156,38 @@ class PropertyRequestController extends Controller
 
         $dealers = Dealer::query()->orderBy('name')->get();
 
+        $baseCounts = PropertyRequest::query();
+        if ($user && $user->isDealer()) {
+            $baseCounts->where('submitted_by', $user->id);
+        }
+
+        $agingCount = (clone $baseCounts)->overdue()->count();
+        $counts = [
+            'total' => (clone $baseCounts)->count(),
+            'not_acknowledged' => (clone $baseCounts)->notAcknowledged()->count(),
+            'inspection_pending' => (clone $baseCounts)->stageStatus('inspection', 'pending')->count(),
+            'inspection_ongoing' => (clone $baseCounts)->stageStatus('inspection', 'on_going')->count(),
+            'inspection_completed' => (clone $baseCounts)->stageStatus('inspection', 'completed')->count(),
+            'work_order_pending' => (clone $baseCounts)->stageStatus('work_order', 'pending')->count(),
+            'work_order_ongoing' => (clone $baseCounts)->stageStatus('work_order', 'on_going')->count(),
+            'work_order_completed' => (clone $baseCounts)->stageStatus('work_order', 'completed')->count(),
+            'service_report_pending' => (clone $baseCounts)->stageStatus('service_report', 'pending')->count(),
+            'service_report_ongoing' => (clone $baseCounts)->stageStatus('service_report', 'on_going')->count(),
+            'service_report_completed' => (clone $baseCounts)->stageStatus('service_report', 'completed')->count(),
+            'pending' => (clone $baseCounts)->pendingRequest()->count(),
+            'completed' => (clone $baseCounts)->where('status', 'completed')->count(),
+            'aging' => $agingCount,
+            'overdue' => $agingCount,
+        ];
+
+        foreach (['inspection', 'work_order', 'service_report'] as $stage) {
+            $counts[$stage] = $counts["{$stage}_pending"]
+                + $counts["{$stage}_ongoing"]
+                + $counts["{$stage}_completed"];
+        }
+
+        $agingRequestsEnabled = config('features.aging_requests', false);
+
         return view('requests.index', compact(
             'requests',
             'dealers',
@@ -167,7 +200,9 @@ class PropertyRequestController extends Controller
             'selectedArea',
             'selectedAreaRaw',
             'selectedBrand',
-            'selectedMonth'
+            'selectedMonth',
+            'counts',
+            'agingRequestsEnabled'
         ));
     }
 
@@ -320,8 +355,10 @@ class PropertyRequestController extends Controller
                 $stage = $request->stage;
                 if ($stage === 'not_acknowledged' || $stage === 'for_acknowledgement') {
                     $q->notAcknowledged();
-                } elseif ($request->filled('status')) {
+                } elseif ($request->filled('status') && $request->status !== 'all') {
                     $q->stageStatus($stage, $request->status);
+                } else {
+                    $q->atWorkflowStage($stage);
                 }
             })
             ->when(!$request->filled('stage') && $request->filled('status'), function ($q) use ($request) {
@@ -599,6 +636,67 @@ class PropertyRequestController extends Controller
         );
 
         return back()->with('status', 'Request status updated.');
+    }
+
+    public function updatePriority(Request $request, PropertyRequest $propertyRequest)
+    {
+        abort_unless($request->user()->isManager() || $request->user()->isAdmin(), 403, 'Only PM Managers can edit priority status.');
+
+        $validated = $request->validate([
+            'priority' => ['required', Rule::in(['regular', 'urgent'])],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+            'current_password' => ['required', 'current_password'],
+        ], [
+            'priority.required' => 'Please select a priority status.',
+            'priority.in' => 'Selected priority is invalid.',
+            'remarks.max' => 'Remarks may not exceed 1000 characters.',
+            'current_password.required' => 'Your password is required to update priority status.',
+            'current_password.current_password' => 'The password you entered is incorrect.',
+        ]);
+
+        $oldPriority = $propertyRequest->priority;
+        $newPriority = $validated['priority'];
+        $remarks = isset($validated['remarks']) && trim($validated['remarks']) !== '' ? trim($validated['remarks']) : null;
+        $priorityChanged = $oldPriority !== $newPriority;
+        $remarksChanged = $propertyRequest->priority_remarks !== $remarks;
+
+        if ($priorityChanged || $remarksChanged) {
+            $propertyRequest->update([
+                'priority' => $newPriority,
+                'priority_remarks' => $remarks,
+            ]);
+
+            AuditLog::record(
+                'priority_status_updated',
+                "{$propertyRequest->reference_no} priority status changed from ".ucfirst($oldPriority)." to ".ucfirst($newPriority)." by {$request->user()->role_label} {$request->user()->name}." . ($remarks ? " Remarks: {$remarks}" : ''),
+                $propertyRequest,
+                [
+                    'old_priority' => $oldPriority,
+                    'new_priority' => $newPriority,
+                    'remarks' => $remarks,
+                    'updated_by_id' => $request->user()->id,
+                    'updated_by_name' => $request->user()->name,
+                ]
+            );
+
+            app(RequestNotificationService::class)->priorityChanged($propertyRequest, $oldPriority, $newPriority, $remarks);
+
+            $statusMessage = "Priority for {$propertyRequest->reference_no} updated to " . ucfirst($newPriority) . " and dealer has been notified.";
+        } else {
+            $statusMessage = "Priority for {$propertyRequest->reference_no} remained unchanged (" . ucfirst($newPriority) . ").";
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $statusMessage,
+                'priority' => $newPriority,
+                'priority_label' => ucfirst($newPriority),
+                'remarks' => $remarks,
+            ]);
+        }
+
+        return back()->with('status', $statusMessage);
     }
 
     public function acknowledge(Request $request, PropertyRequest $propertyRequest)
@@ -1297,6 +1395,13 @@ class PropertyRequestController extends Controller
             'Only an administrator is authorized to undo workflow steps.'
         );
 
+        $request->validate([
+            'current_password' => ['required', 'current_password'],
+        ], [
+            'current_password.required' => 'Your administrator password is required to undo a workflow step.',
+            'current_password.current_password' => 'The password you entered is incorrect.',
+        ]);
+
         $stages = [
             'inspection' => [
                 'label' => 'Inspection',
@@ -1401,6 +1506,56 @@ class PropertyRequestController extends Controller
             'Content-Type' => $attachment->mime_type,
             'Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"',
         ]);
+    }
+
+    public function destroyRequest(Request $request, PropertyRequest $propertyRequest)
+    {
+        abort_unless(
+            $request->user()->isAdmin(),
+            403,
+            'Only an administrator is authorized to delete requests.'
+        );
+
+        $request->validate([
+            'current_password' => ['required', 'current_password'],
+        ], [
+            'current_password.required' => 'Your administrator password is required to delete a request.',
+            'current_password.current_password' => 'The password you entered is incorrect.',
+        ]);
+
+        $referenceNo = $propertyRequest->reference_no;
+        $attachmentPaths = $propertyRequest->attachments()->pluck('path')->all();
+        $deletedCounts = [
+            'attachments' => count($attachmentPaths),
+        ];
+
+        DB::transaction(function () use ($propertyRequest) {
+            AuditLog::where('subject_type', 'PropertyRequest')
+                ->where('subject_id', $propertyRequest->id)
+                ->delete();
+
+            $propertyRequest->notifications()->delete();
+            $propertyRequest->delete();
+        });
+
+        if ($attachmentPaths !== []) {
+            Storage::delete($attachmentPaths);
+        }
+
+        AuditLog::record(
+            'request_deleted',
+            "{$referenceNo} was permanently deleted by administrator {$request->user()->name}.",
+            null,
+            [
+                'reference_no' => $referenceNo,
+                'attachments_removed' => $deletedCounts['attachments'],
+            ]
+        );
+
+        return redirect()->route('requests.index')->with(
+            'status',
+            "Request {$referenceNo} and {$deletedCounts['attachments']} attachment(s) were permanently deleted."
+        );
     }
 
     private function ensureCanView(Request $request, PropertyRequest $propertyRequest): void

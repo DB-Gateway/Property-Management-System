@@ -44,7 +44,29 @@
                 <div class="request-information-row"><span>Request Type</span><strong>{{ $propertyRequest->request_type }}</strong></div>
                 <div class="request-information-row"><span>Dealer</span><strong>{{ $propertyRequest->display_dealer_name }}</strong></div>
                 <div class="request-information-row"><span>Branch</span><strong>{{ $propertyRequest->display_branch }}</strong></div>
-                <div class="request-information-row"><span>Priority</span><strong><span class="badge priority-{{ $propertyRequest->priority }}">{{ ucfirst($propertyRequest->priority) }}</span></strong></div>
+                <div class="request-information-row">
+                    <span>Priority</span>
+                    <strong>
+                        <span class="badge priority-{{ $propertyRequest->priority }}">{{ ucfirst($propertyRequest->priority) }}</span>
+                        @if($viewer->isManager())
+                            <button type="button" class="button button-light button-xs" data-open-priority-modal
+                                    data-reference="{{ $propertyRequest->reference_no }}"
+                                    data-priority="{{ $propertyRequest->priority }}"
+                                    data-remarks="{{ $propertyRequest->priority_remarks ?? '' }}"
+                                    data-url="{{ route('requests.priority', $propertyRequest) }}"
+                                    style="margin-left: 8px; font-size: 11px; padding: 2px 8px; min-height: 24px; vertical-align: middle;"
+                                    title="Edit Priority Status">
+                                Edit
+                            </button>
+                        @endif
+                    </strong>
+                </div>
+                @if($propertyRequest->priority_remarks)
+                    <div class="request-information-row">
+                        <span>Priority Remarks</span>
+                        <strong style="font-weight: normal; color: #334155;">{{ $propertyRequest->priority_remarks }}</strong>
+                    </div>
+                @endif
             </div>
             <div class="request-information-column">
                 <div class="request-information-row"><span>Submitted By</span><strong>{{ $propertyRequest->submitter_name }}</strong></div>
@@ -80,8 +102,8 @@
 
     @if($viewer->isManager())
         <section class="panel monitoring-note wide-note">
-            <strong>PM Manager View-Only Access</strong>
-            <p>PM Managers have view-only access to requests and dealer requirements, and exclusively publish and print completed request operations reports. PM Managers do not approve requests, assign who the Dial-Lead is, or choose representatives.</p>
+            <strong>PM Manager Workflow Controls</strong>
+            <p>PM Managers monitor request activities, can update request priority status, and exclusively publish and print completed request operations reports. Only Dial-A conducts inspections and uploads workflow documents.</p>
         </section>
 
         @if($inspectionDone)
@@ -349,24 +371,13 @@
                                 </div>
                             </form>
                         @else
-                            {{-- Step 2: Confirmation of Done Service Report --}}
-                            <div class="stage-success-message" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; margin-bottom: 14px;">
-                                <strong>Step 1 Complete:</strong> Service Report attachments have been uploaded. Please confirm <strong>Done Service Report</strong> below to officially complete the request.
-                            </div>
 
                             <div class="workflow-file-gallery" style="margin-bottom: 16px;">
                                 @include('requests.partials.files', ['files' => $propertyRequest->serviceReportFiles, 'gallery' => true, 'emptyMessage' => 'No Service Report files were retained for this request.'])
                             </div>
 
-                            <form class="workflow-upload-form" method="POST" action="{{ route('requests.finish', $propertyRequest) }}" onsubmit="return confirmServiceReportDone(event);">
-                                @csrf
-                                <div class="workflow-form-footer" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                    <button class="button button-primary" type="submit">Done Service Report</button>
-                                </div>
-                            </form>
-
-                            <details style="margin-top: 14px; font-size: 0.88rem;">
-                                <summary style="cursor: pointer; color: #2563eb; font-weight: 600;">+ Upload additional Service Report attachments</summary>
+                            <details style="margin-top: 14px; font-size: 0.66rem;">
+                                <summary style="cursor: pointer; color: #2563eb; font-weight: 600;">Upload additional attachments</summary>
                                 <form class="workflow-upload-form" method="POST" action="{{ route('requests.service-report.upload', $propertyRequest) }}" enctype="multipart/form-data" style="margin-top: 10px; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
                                     @csrf
                                     <div class="form-field">
@@ -379,6 +390,14 @@
                                     </div>
                                 </form>
                             </details>
+
+                            <form class="workflow-upload-form" method="POST" action="{{ route('requests.finish', $propertyRequest) }}" onsubmit="return confirmServiceReportDone(event);">
+                                @csrf
+                                <div class="workflow-form-footer" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                    <button class="button button-primary" type="submit">Done Service Report</button>
+                                </div>
+                            </form>
+
                         @endif
                     @else
                         @if($hasServiceReportFiles)
@@ -410,6 +429,12 @@
             </div>
         </section>
 
+    @elseif($viewer->isDealer() && $isFullyCompleted)
+        @include('requests.partials.dealer-completed-workflow', [
+            'propertyRequest' => $propertyRequest,
+            'representativesList' => $representativesList,
+            'workOrderRepresentativesList' => $workOrderRepresentativesList,
+        ])
     @elseif($viewer->isAdmin())
         <section class="panel monitoring-note wide-note">
             <strong>Administrator workflow controls</strong>
@@ -484,8 +509,56 @@
                 </div>
             </section>
         @endif
+
+        <section class="panel admin-delete-section">
+            <div class="workflow-card-head"><span class="workflow-title-icon" style="color:#d71938;">✕</span><h2>Delete Request</h2></div>
+            <div class="admin-delete-body">
+                <p>Permanently remove this request and all its attachments. <strong>This action cannot be undone.</strong></p>
+                <form method="POST"
+                      action="{{ route('requests.destroy', $propertyRequest) }}"
+                      data-admin-password-form
+                      data-action-title="Delete Request {{ $propertyRequest->reference_no }}"
+                      data-action-description="This will permanently remove the request, all uploaded files, and related audit entries. This action cannot be undone.">
+                    @csrf
+                    @method('DELETE')
+                    <input type="hidden" name="current_password" data-admin-password-field>
+                    <button class="button button-danger" type="submit">
+                        <span aria-hidden="true">✕</span> Delete This Request
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        @include('requests.partials.admin-password-modal')
     @endif
 </div>
+
+@if($viewer->isManager())
+    @include('requests.partials.edit-priority-modal')
+@endif
+
+@if($viewer->isDealer() && request('priority_notification'))
+    @php
+        $priorityNotice = $viewer->notifications()->find(request('priority_notification'));
+    @endphp
+    @if($priorityNotice && ($priorityNotice->data['kind'] ?? null) === 'priority_changed')
+        @push('scripts')
+        <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof window.openDealerPriorityNoticeModal === 'function') {
+                window.openDealerPriorityNoticeModal({
+                    referenceNo: @json($priorityNotice->data['reference_no'] ?? $propertyRequest->reference_no),
+                    oldPriority: @json($priorityNotice->data['old_priority'] ?? 'regular'),
+                    newPriority: @json($priorityNotice->data['new_priority'] ?? $propertyRequest->priority),
+                    remarks: @json($priorityNotice->data['remarks'] ?? $propertyRequest->priority_remarks ?? ''),
+                    url: @json(route('requests.show', $propertyRequest))
+                });
+            }
+        });
+        </script>
+        @endpush
+    @endif
+@endif
 
 @push('scripts')
 <script>
@@ -653,20 +726,79 @@ if (srFilesInput) {
     });
 }
 
-document.querySelectorAll('[data-undo-workflow-form]').forEach(function (form) {
-    form.addEventListener('submit', function (event) {
-        var stageLabel = form.dataset.stageLabel;
-        var cascadeMessage = form.dataset.cascadeMessage;
-        var confirmed = confirm(
-            'Undo ' + stageLabel + '?\n\n' +
-            cascadeMessage + '\nUploaded files and entered details will be kept.'
-        );
+// Admin password modal for undo & delete actions
+(function () {
+    var overlay = document.getElementById('adminPasswordOverlay');
+    if (!overlay) return;
 
-        if (!confirmed) {
+    var titleEl = document.getElementById('adminPasswordTitle');
+    var descEl = document.getElementById('adminPasswordDescription');
+    var passwordInput = document.getElementById('adminPasswordInput');
+    var confirmBtn = document.getElementById('adminPasswordConfirm');
+    var cancelBtn = document.getElementById('adminPasswordCancel');
+    var pendingForm = null;
+
+    function openModal(form) {
+        pendingForm = form;
+        titleEl.textContent = form.dataset.actionTitle || 'Confirm Action';
+        descEl.textContent = form.dataset.actionDescription || 'Enter your administrator password to proceed.';
+        passwordInput.value = '';
+        overlay.style.display = 'flex';
+        passwordInput.focus();
+    }
+
+    function closeModal() {
+        overlay.style.display = 'none';
+        pendingForm = null;
+        passwordInput.value = '';
+    }
+
+    function submitWithPassword() {
+        if (!pendingForm || !passwordInput.value.trim()) {
+            passwordInput.focus();
+            return;
+        }
+        var hiddenField = pendingForm.querySelector('[data-admin-password-field]');
+        if (hiddenField) {
+            hiddenField.value = passwordInput.value;
+        }
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Verifying…';
+        pendingForm.submit();
+    }
+
+    document.querySelectorAll('[data-admin-password-form]').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            var hiddenField = form.querySelector('[data-admin-password-field]');
+            if (hiddenField && !hiddenField.value) {
+                event.preventDefault();
+                openModal(form);
+            }
+        });
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function (event) {
+        if (event.target === overlay) closeModal();
+    });
+    confirmBtn.addEventListener('click', submitWithPassword);
+    passwordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
             event.preventDefault();
+            submitWithPassword();
         }
     });
-});
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && overlay.style.display !== 'none') {
+            closeModal();
+        }
+    });
+
+    @if($errors->has('current_password'))
+        var errorForm = document.querySelector('[data-admin-password-form]');
+        if (errorForm) openModal(errorForm);
+    @endif
+})();
 </script>
 @endpush
 @endsection

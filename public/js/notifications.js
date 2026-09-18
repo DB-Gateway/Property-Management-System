@@ -21,6 +21,7 @@
         schedule_changed: ['M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'm9 16 2 2 4-4'],
         upcoming: ['M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z', 'M12 6v6l4 2'],
         ageing: ['M10.3 3.9 1.8 18.1A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0Z', 'M12 9v4m0 4h.01'],
+        priority_changed: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
     };
     const notificationIcon = (item) => {
         let icon = item.kind;
@@ -82,6 +83,35 @@
             copy.className = 'notification-copy';
             copy.append(title, message, time);
             link.append(notificationIcon(item), copy);
+
+            if (item.kind === 'priority_changed') {
+                link.dataset.kind = 'priority_changed';
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (!item.read) {
+                        item.read = true;
+                        link.classList.remove('is-unread');
+                        request(bell.dataset.readAllUrl.replace('/read-all', `/${item.id}/read`), 'PATCH').catch(() => {});
+                        const curCount = parseInt(badge.textContent, 10);
+                        if (!isNaN(curCount) && curCount > 1) {
+                            badge.textContent = curCount - 1;
+                        } else {
+                            badge.hidden = true;
+                        }
+                    }
+                    bell.open = false;
+                    if (typeof window.openDealerPriorityNoticeModal === 'function') {
+                        window.openDealerPriorityNoticeModal({
+                            referenceNo: item.reference_no,
+                            oldPriority: item.old_priority,
+                            newPriority: item.new_priority,
+                            remarks: item.remarks,
+                            url: item.url,
+                        });
+                    }
+                });
+            }
+
             list.append(link);
         }
         if (!list.children.length) {
@@ -132,6 +162,57 @@
     window.addEventListener('gateway:push-received', () => void refresh());
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
     window.addEventListener('online', () => void refresh());
+    const priorityNoticeOverlay = document.getElementById('dealerPriorityNoticeOverlay');
+    const closeDealerPriorityNotice = () => {
+        if (priorityNoticeOverlay) priorityNoticeOverlay.style.display = 'none';
+    };
+
+    window.openDealerPriorityNoticeModal = (info) => {
+        if (!priorityNoticeOverlay) return;
+        const refEl = document.getElementById('dealerPriorityNoticeRef');
+        const oldEl = document.getElementById('dealerNoticeOldPriority');
+        const newEl = document.getElementById('dealerNoticeNewPriority');
+        const remarksEl = document.getElementById('dealerNoticeRemarks');
+        const viewLink = document.getElementById('dealerPriorityNoticeViewLink');
+
+        if (refEl) refEl.textContent = info.referenceNo || 'Request';
+        if (oldEl) {
+            const oldP = (info.oldPriority || 'regular').toLowerCase();
+            oldEl.textContent = oldP.charAt(0).toUpperCase() + oldP.slice(1);
+            oldEl.className = 'badge priority-' + oldP;
+        }
+        if (newEl) {
+            const newP = (info.newPriority || 'urgent').toLowerCase();
+            newEl.textContent = newP.charAt(0).toUpperCase() + newP.slice(1);
+            newEl.className = 'badge priority-' + newP;
+        }
+        if (remarksEl) {
+            remarksEl.textContent = info.remarks || 'No remarks provided.';
+            remarksEl.style.fontStyle = info.remarks ? 'normal' : 'italic';
+            remarksEl.style.color = info.remarks ? '#1e293b' : '#64748b';
+        }
+        if (viewLink) {
+            viewLink.href = info.url || '#';
+        }
+
+        priorityNoticeOverlay.style.display = 'flex';
+    };
+
+    const dismissBtn = document.getElementById('dealerPriorityNoticeDismiss');
+    const closeXBtn = document.getElementById('dealerPriorityNoticeCloseBtn');
+    if (dismissBtn) dismissBtn.addEventListener('click', closeDealerPriorityNotice);
+    if (closeXBtn) closeXBtn.addEventListener('click', closeDealerPriorityNotice);
+    if (priorityNoticeOverlay) {
+        priorityNoticeOverlay.addEventListener('click', (e) => {
+            if (e.target === priorityNoticeOverlay) closeDealerPriorityNotice();
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && priorityNoticeOverlay && priorityNoticeOverlay.style.display !== 'none') {
+            closeDealerPriorityNotice();
+        }
+    });
+
     timer = setInterval(() => { if (!document.hidden && !(bell.open && hasHistory)) void refresh(); }, 30000);
     void refresh();
 })();

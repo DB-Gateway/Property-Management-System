@@ -33,6 +33,10 @@ class NotificationController extends Controller
                 'message' => $item->data['message'],
                 'kind' => $item->data['kind'],
                 'stage' => $item->data['stage'] ?? null,
+                'remarks' => $item->data['remarks'] ?? null,
+                'old_priority' => $item->data['old_priority'] ?? null,
+                'new_priority' => $item->data['new_priority'] ?? null,
+                'reference_no' => $item->data['reference_no'] ?? null,
                 'read' => $item->read_at !== null,
                 'time' => $item->created_at->diffForHumans(),
                 'url' => route('notifications.open', $item->id),
@@ -61,6 +65,10 @@ class NotificationController extends Controller
         $propertyRequest = PropertyRequest::findOrFail($record->property_request_id);
         abort_if($request->user()->isDealer() && $propertyRequest->submitted_by !== $request->user()->id, 403);
         $record->markAsRead();
+
+        if (($record->data['kind'] ?? null) === 'priority_changed') {
+            return redirect()->route('requests.show', ['propertyRequest' => $propertyRequest, 'priority_notification' => $record->id]);
+        }
 
         return redirect()->route('requests.show', $propertyRequest);
     }

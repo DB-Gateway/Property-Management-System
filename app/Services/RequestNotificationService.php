@@ -80,6 +80,44 @@ class RequestNotificationService
         }
     }
 
+    public function priorityChanged(PropertyRequest $request, string $oldPriority, string $newPriority, ?string $remarks = null): void
+    {
+        $recipients = User::where('is_active', true)->where('role', 'dealer')->where(function (Builder $query) use ($request) {
+            $query->whereKey($request->submitted_by);
+            if ($request->dealer_id) {
+                $query->orWhere('dealer_id', $request->dealer_id);
+            }
+        })->get();
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        $event = (string) Str::uuid();
+        $oldLabel = ucfirst($oldPriority);
+        $newLabel = ucfirst($newPriority);
+
+        $message = "{$request->reference_no}: Priority was changed from {$oldLabel} to {$newLabel}.";
+        if ($remarks) {
+            $message .= " Remarks: {$remarks}";
+        }
+
+        $this->send(
+            $request,
+            $recipients,
+            'priority_changed',
+            'Priority updated',
+            $message,
+            "{$event}:priority",
+            [
+                'old_priority' => $oldPriority,
+                'new_priority' => $newPriority,
+                'remarks' => $remarks,
+                'reference_no' => $request->reference_no,
+            ]
+        );
+    }
+
     public function reminders(): void
     {
         $recipients = $this->dialAUsers();

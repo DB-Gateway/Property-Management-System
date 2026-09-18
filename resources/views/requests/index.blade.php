@@ -7,7 +7,9 @@
 @endpush
 
 @section('content')
-@php($showsActivityProgress = true)     
+<?php $showsActivityProgress = true; ?>
+
+@include('partials.dashboard-stats')
 
 <section class="panel" id="requests-panel">
     <div class="panel-heading requests-heading">
@@ -21,7 +23,7 @@
     @include('requests.partials.print-summary')
 
     <form class="filter-bar" id="requests-filter-form" data-cascading-filter-form method="GET">
-        <div class="filter-field filter-field-search" title="Search Ticket Number">
+        <div class="filter-field filter-field-search {{ request()->filled('search') ? 'is-active' : '' }}" title="Search Ticket Number">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
@@ -32,7 +34,7 @@
             <input name="search" id="request-filter-search" value="{{ request('search') }}" placeholder="Ticket Number" aria-label="Search Ticket number, Ticket Number">
         </div>
 
-        <div class="filter-field filter-field-month" title="Search Month">
+        <div class="filter-field filter-field-month {{ (request()->filled('month') && request('month') !== now()->format('Y-m')) ? 'is-active' : '' }}" title="Search Month">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -46,7 +48,7 @@
         </div>
 
         @unless(auth()->user()->isDealer())
-            <div class="filter-field filter-field-area" title="Search Area">
+            <div class="filter-field filter-field-area {{ (request()->filled('area') || request()->filled('branch')) ? 'is-active' : '' }}" title="Search Area">
                 <span class="filter-icon-box" aria-hidden="true">
                     <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -60,7 +62,7 @@
                         <optgroup label="{{ $areaOption }}">
                             <option value="{{ $areaOption }}" @selected(($selectedAreaRaw ?? '') === $areaOption || ($selectedArea === $areaOption && empty($selectedBranch)))>{{ $areaOption }} (All)</option>
                             @foreach($cityList as $cityOption)
-                                @php($combinedVal = $cityOption.' - '.$areaOption)
+                                <?php $combinedVal = $cityOption.' - '.$areaOption; ?>
                                 <option value="{{ $combinedVal }}" @selected(($selectedAreaRaw ?? '') === $combinedVal || ($selectedBranch === $cityOption && $selectedArea === $areaOption))>{{ $combinedVal }}</option>
                             @endforeach
                         </optgroup>
@@ -68,7 +70,7 @@
                 </select>
             </div>
 
-            <div class="filter-field filter-field-dealer" title="Search Dealer">
+            <div class="filter-field filter-field-dealer {{ (request()->filled('brand') || request()->filled('dealer')) ? 'is-active' : '' }}" title="Search Dealer">
                 <span class="filter-icon-box" aria-hidden="true">
                     <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
@@ -85,7 +87,7 @@
             </div>
         @endunless
 
-        <div class="filter-field filter-field-stage" title="Search Activities">
+        <div class="filter-field filter-field-stage {{ (request()->filled('stage') && request('stage') !== 'all') ? 'is-active' : '' }}" title="Search Activities">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
@@ -103,7 +105,7 @@
             </select>
         </div>
 
-        <div class="filter-field filter-field-status" title="Search Progress">
+        <div class="filter-field filter-field-status {{ (request()->filled('status') && request('status') !== 'all') ? 'is-active' : '' }}" title="Search Progress">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -119,7 +121,7 @@
             </select>
         </div>
 
-        <div class="filter-field filter-field-priority" title="Search Priority">
+        <div class="filter-field filter-field-priority {{ request()->filled('priority') ? 'is-active' : '' }}" title="Search Priority">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
@@ -133,8 +135,16 @@
             </select>
         </div>
 
+        <?php
+            $hasActiveFilters = request()->filled('search')
+                || (request()->filled('month') && request('month') !== now()->format('Y-m'))
+                || (!auth()->user()->isDealer() && (request()->filled('area') || request()->filled('branch') || request()->filled('brand') || request()->filled('dealer')))
+                || (request()->filled('stage') && request('stage') !== 'all')
+                || (request()->filled('status') && request('status') !== 'all')
+                || request()->filled('priority');
+        ?>
         <button class="button button-primary" type="submit">Filter</button>
-        <a class="button button-light" href="{{ route('requests.index') }}">Reset</a>
+        <a class="button button-light {{ $hasActiveFilters ? 'has-active' : '' }}" href="{{ route('requests.index') }}">Reset</a>
     </form>
 
     <script id="requests-directory-data" data-cascading-matrix type="application/json">
@@ -152,6 +162,9 @@
                     <th>Request Submission Date &amp; Time</th>
                     <th>Activity Completion Date &amp; Time</th>
                     <th>Activity Progress</th>
+                    @if(auth()->user()->isManager())
+                        <th>ACTIONS</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
@@ -179,13 +192,30 @@
                             </div>
                         </td>
                         <td class="activity-progress-cell">@include('requests.partials.activity-progress', ['requestItem' => $item, 'compact' => true])</td>
+                        @if(auth()->user()->isManager())
+                            <td>
+                                <button type="button" class="table-action button-link" data-open-priority-modal
+                                        data-reference="{{ $item->reference_no }}"
+                                        data-priority="{{ $item->priority }}"
+                                        data-remarks="{{ $item->priority_remarks ?? '' }}"
+                                        data-url="{{ route('requests.priority', $item) }}"
+                                        title="Edit Priority Status"
+                                        style="background:none; border:none; padding:0; cursor:pointer; font-size:12px;">
+                                    Edit Priority
+                                </button>
+                            </td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="7"><div class="empty-state">No matching requests found.</div></td></tr>
+                    <tr><td colspan="{{ auth()->user()->isManager() ? 8 : 7 }}"><div class="empty-state">No matching requests found.</div></td></tr>
                 @endforelse
             </tbody>
         </table>
     </div>
     <div class="pagination-wrap">{{ $requests->links() }}</div>
 </section>
+
+@if(auth()->user()->isManager())
+    @include('requests.partials.edit-priority-modal')
+@endif
 @endsection

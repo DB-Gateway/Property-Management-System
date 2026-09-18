@@ -4,12 +4,6 @@
 
 @section('content')
 
-@if($user->isManager())
-    <div class="page-heading" style="margin-bottom: 20px;">
-        <h1 style="font-size: 24px; font-weight: 800; color: #0d2c4b;">PM Manager Dashboard</h1>
-    </div>
-@endif
-
 @if($user->isDialA() && !empty($awaitingCompletion) && $awaitingCompletion->isNotEmpty())
     <section class="panel" style="border: 2px solid #2563eb; background: #eff6ff; padding: 18px 22px; border-radius: 8px; margin-bottom: 24px;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">

@@ -53,6 +53,7 @@ Route::middleware(['auth', EnsurePasswordChanged::class])->group(function () {
     Route::patch('/requests/{propertyRequest}/schedule', [PropertyRequestController::class, 'updateSchedule'])->name('requests.schedule');
     Route::patch('/requests/{propertyRequest}/assign', [PropertyRequestController::class, 'assignToMe'])->name('requests.assign');
     Route::patch('/requests/{propertyRequest}/status', [PropertyRequestController::class, 'updateStatus'])->name('requests.status');
+    Route::patch('/requests/{propertyRequest}/priority', [PropertyRequestController::class, 'updatePriority'])->name('requests.priority');
     Route::patch('/requests/{propertyRequest}/acknowledge', [PropertyRequestController::class, 'acknowledge'])->name('requests.acknowledge');
     Route::patch('/requests/{propertyRequest}/inspection-assignment', [PropertyRequestController::class, 'assignInspection'])->name('requests.inspection.assign');
     Route::patch('/requests/{propertyRequest}/inspection-date', [PropertyRequestController::class, 'saveInspectionDate'])->name('requests.inspection.date');
@@ -67,6 +68,7 @@ Route::middleware(['auth', EnsurePasswordChanged::class])->group(function () {
     Route::patch('/requests/{propertyRequest}/workflow/{stage}/undo', [PropertyRequestController::class, 'undoWorkflowStage'])
         ->where('stage', 'inspection|work-order|service-report|completion')
         ->name('requests.workflow.undo');
+    Route::delete('/requests/{propertyRequest}', [PropertyRequestController::class, 'destroyRequest'])->name('requests.destroy');
     Route::get('/attachments/{attachment}', [PropertyRequestController::class, 'attachment'])->name('attachments.show');
 
     Route::get('/dealer-directory', [DealerDirectoryController::class, 'index'])->name('dealers.index');

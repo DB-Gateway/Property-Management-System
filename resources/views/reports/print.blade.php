@@ -276,11 +276,15 @@
             <div><span>Dial-A Attachments</span><strong>{{ $summary['dial_a_attachments'] }}</strong><span style="font-size: 8px; color: #72869c; display: block; margin-top: 2px;">({{ $summary['work_order_files'] }} WO · {{ $summary['service_report_files'] }} SR)</span></div>
         </section>
 
-        <p class="filters"><strong>Filters:</strong> Status: {{ !empty($filters['status']) ? (in_array($filters['status'], ['not_acknowledged', 'for_acknowledgement'], true) ? 'For Acknowledgement' : (in_array($filters['status'], ['in_progress', 'work_in_progress']) ? 'Work in Progress' : ucfirst(str_replace('_', ' ', $filters['status'])))) : 'All Statuses' }}
+        <p class="filters"><strong>Filters:</strong>
+            @if(!empty($filters['stage']) && $filters['stage'] !== 'all')
+                Stage: {{ ucfirst(str_replace('_', ' ', $filters['stage'])) }} &middot;
+            @endif
+            Status: {{ !empty($filters['status']) && $filters['status'] !== 'all' ? (in_array($filters['status'], ['not_acknowledged', 'for_acknowledgement'], true) ? 'For Acknowledgement' : (in_array($filters['status'], ['in_progress', 'work_in_progress']) ? 'Work in Progress' : ($filters['status'] === 'aging' ? 'Aging Request' : ucfirst(str_replace('_', ' ', $filters['status']))))) : 'All Statuses' }}
             @if($dateFilterLabel)
                 &middot; Date: {{ $dateFilterLabel }}
             @endif
-            @php($activeFilters = collect($filters)->except(['status', 'date_period', 'period_day', 'period_week', 'period_month'])->filter(fn($value) => $value !== null && $value !== ''))
+            @php($activeFilters = collect($filters)->except(['stage', 'status', 'date_period', 'period_day', 'period_week', 'period_month'])->filter(fn($value) => $value !== null && $value !== ''))
             @foreach($activeFilters as $name => $value)
                 · {{ str($name)->replace('_', ' ')->title() }}: {{ $name === 'assigned_support_id' ? ($requests->firstWhere('assigned_support_id', $value)?->assignedSupport?->name ?? $value) : $value }}
             @endforeach

@@ -24,7 +24,7 @@
     <form class="filter-bar dealer-filter-bar" id="dealer-filter-form" data-cascading-filter-form method="GET">
         <input type="hidden" name="city" id="dealer-filter-city" value="{{ $selectedCity }}">
 
-        <div class="filter-field filter-field-search" title="Search Dealer">
+        <div class="filter-field filter-field-search {{ request()->filled('search') ? 'is-active' : '' }}" title="Search Dealer">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
@@ -35,7 +35,7 @@
             <input name="search" id="dealer-filter-search" value="{{ request('search') }}" placeholder="Search dealer, city, address, or point person" aria-label="Search dealer, city, address, or point person">
         </div>
 
-        <div class="filter-field filter-field-area" title="Search Area">
+        <div class="filter-field filter-field-area {{ (request()->filled('area') || request()->filled('city')) ? 'is-active' : '' }}" title="Search Area">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -49,7 +49,7 @@
                     <optgroup label="{{ $areaOption }}">
                         <option value="{{ $areaOption }}" @selected(($selectedAreaRaw ?? '') === $areaOption || ($selectedArea === $areaOption && empty($selectedCity)))>{{ $areaOption }} (All)</option>
                         @foreach($cityList as $cityOption)
-                            @php($combinedVal = $cityOption.' - '.$areaOption)
+                            <?php $combinedVal = $cityOption.' - '.$areaOption; ?>
                             <option value="{{ $combinedVal }}" @selected(($selectedAreaRaw ?? '') === $combinedVal || ($selectedCity === $cityOption && $selectedArea === $areaOption))>{{ $combinedVal }}</option>
                         @endforeach
                     </optgroup>
@@ -57,7 +57,7 @@
             </select>
         </div>
 
-        <div class="filter-field filter-field-brand" title="Search Brand">
+        <div class="filter-field filter-field-brand {{ request()->filled('brand') ? 'is-active' : '' }}" title="Search Brand">
             <span class="filter-icon-box" aria-hidden="true">
                 <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
@@ -73,8 +73,11 @@
             </select>
         </div>
 
+        <?php
+            $hasActiveFilters = request()->filled('search') || request()->filled('area') || request()->filled('city') || request()->filled('brand');
+        ?>
         <button class="button button-primary" type="submit">Filter</button>
-        <a class="button button-light" href="{{ route('dealers.index') }}">Reset</a>
+        <a class="button button-light {{ $hasActiveFilters ? 'has-active' : '' }}" href="{{ route('dealers.index') }}">Reset</a>
     </form>
     <div class="table-scroll">
         <table class="data-table dealer-table">

@@ -21,7 +21,8 @@ class ReportController extends Controller
         $filters = $this->filters($request);
 
         $selectedBranch = trim((string) ($filters['branch'] ?? ''));
-        $selectedArea = trim((string) ($filters['area'] ?? ''));
+        $selectedAreaRaw = trim((string) ($filters['area'] ?? ''));
+        $selectedArea = $selectedAreaRaw;
         $selectedBrand = trim((string) ($filters['brand'] ?? ''));
 
         $directoryMatrix = Dealer::query()
@@ -37,12 +38,31 @@ class ReportController extends Controller
                 'brand' => $d->brand,
             ]);
 
+        if (str_contains($selectedAreaRaw, ' - ')) {
+            [$part1, $part2] = explode(' - ', $selectedAreaRaw, 2);
+            $part1 = trim($part1);
+            $part2 = trim($part2);
+            if ($directoryMatrix->pluck('area')->unique()->contains($part2)) {
+                $selectedBranch = $part1;
+                $selectedArea = $part2;
+            } elseif ($directoryMatrix->pluck('area')->unique()->contains($part1)) {
+                $selectedArea = $part1;
+                $selectedBranch = $part2;
+            } else {
+                $selectedBranch = $part1;
+                $selectedArea = $part2;
+            }
+        } elseif ($selectedAreaRaw !== '' && $directoryMatrix->pluck('city')->unique()->contains($selectedAreaRaw)) {
+            $selectedBranch = $selectedAreaRaw;
+            $selectedArea = '';
+        }
+
         // Sanitize selections if any mutually incompatible pairs are passed
         if ($selectedBranch !== '' && $selectedArea !== '') {
             $valid = $directoryMatrix->contains(fn ($row) => $row['city'] === $selectedBranch && $row['area'] === $selectedArea);
             if (! $valid) {
                 $selectedArea = '';
-                $filters['area'] = '';
+                $selectedAreaRaw = '';
             }
         }
         if ($selectedBranch !== '' && $selectedBrand !== '') {
@@ -59,6 +79,10 @@ class ReportController extends Controller
                 $filters['brand'] = '';
             }
         }
+
+        $filters['branch'] = $selectedBranch;
+        $filters['area'] = $selectedArea;
+        $filters['selected_area_raw'] = $selectedAreaRaw;
 
         $query = $this->reportQuery($filters);
         $summary = $this->summary(clone $query);
@@ -105,6 +129,14 @@ class ReportController extends Controller
             ->when($selectedArea !== '', fn ($c) => $c->filter(fn ($r) => $r['area'] === $selectedArea))
             ->pluck('brand')->unique()->sort()->values();
 
+        $areasWithCities = $directoryMatrix
+            ->when($selectedBrand !== '', fn ($c) => $c->filter(fn ($r) => $r['brand'] === $selectedBrand))
+            ->groupBy('area')
+            ->map(function ($group) {
+                return $group->pluck('city')->unique()->sort()->values();
+            })
+            ->sortKeys();
+
         return view('reports.index', [
             'requests' => $requests,
             'summary' => $summary,
@@ -115,11 +147,12 @@ class ReportController extends Controller
             'branches' => $branches,
             'areas' => $areas,
             'brands' => $brands,
+            'areasWithCities' => $areasWithCities,
             'directoryMatrix' => $directoryMatrix,
             'selectedBranch' => $selectedBranch,
             'selectedArea' => $selectedArea,
+            'selectedAreaRaw' => $selectedAreaRaw,
             'selectedBrand' => $selectedBrand,
-            'supportUsers' => User::query()->where('role', 'pm_support')->where('is_active', true)->orderBy('name')->get(),
             'requestTypes' => PropertyRequest::query()->distinct()->orderBy('request_type')->pluck('request_type'),
         ]);
     }
@@ -128,6 +161,20 @@ class ReportController extends Controller
     {
         $this->managerOnly($request);
         $filters = $this->filters($request);
+
+        $selectedBranch = trim((string) ($filters['branch'] ?? ''));
+        $selectedAreaRaw = trim((string) ($filters['area'] ?? ''));
+        $selectedArea = $selectedAreaRaw;
+
+        if (str_contains($selectedAreaRaw, ' - ')) {
+            [$part1, $part2] = explode(' - ', $selectedAreaRaw, 2);
+            $selectedBranch = trim($part1);
+            $selectedArea = trim($part2);
+        }
+        $filters['branch'] = $selectedBranch;
+        $filters['area'] = $selectedArea;
+        $filters['selected_area_raw'] = $selectedAreaRaw;
+
         $query = $this->reportQuery($filters);
         $records = $query->get();
         $summary = $this->summary($this->reportQuery($filters));
@@ -219,7 +266,8 @@ class ReportController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
-            'status' => ['nullable', Rule::in(['not_acknowledged', 'for_acknowledgement', 'pending', 'on_going', 'in_progress', 'work_in_progress', 'awaiting_dealer', 'completed', 'overdue', 'aging'])],
+            'stage' => ['nullable', Rule::in(['inspection', 'work_order', 'service_report', 'not_acknowledged', 'for_acknowledgement', 'all'])],
+            'status' => ['nullable', Rule::in(['not_acknowledged', 'for_acknowledgement', 'pending', 'on_going', 'in_progress', 'work_in_progress', 'awaiting_dealer', 'completed', 'overdue', 'aging', 'all'])],
             'date_period' => ['nullable', Rule::in(['day', 'week', 'month'])],
             'period_day' => ['nullable', 'required_if:date_period,day', Rule::in([
                 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -265,6 +313,10 @@ class ReportController extends Controller
             $filters['period_month'] = now()->format('Y-m');
         }
 
+        if (! $request->has('status') && ! $request->has('stage')) {
+            $filters['status'] = 'completed';
+        }
+
         return $filters;
     }
 
@@ -272,31 +324,44 @@ class ReportController extends Controller
     private function reportQuery(array $filters): Builder
     {
         $query = PropertyRequest::query()
-            ->with(['dealer', 'assignedSupport', 'assignedManager', 'requestFiles', 'workOrderFiles', 'serviceReportFiles'])
-            ->when($filters['status'] ?? null, function (Builder $query, string $status) {
-                if ($status === 'overdue' || $status === 'aging') {
-                    $query->overdue();
-                } elseif ($status === 'not_acknowledged' || $status === 'for_acknowledgement') {
-                    $query->notAcknowledged();
-                } elseif ($status === 'in_progress' || $status === 'work_in_progress' || $status === 'on_going') {
-                    $query->whereIn('status', ['on_going', 'in_progress']);
-                } elseif ($status === 'pending') {
-                    $query->pendingRequest();
-                } else {
-                    $query->where('status', $status);
-                }
-            }, function (Builder $query) {
-                $query->where('status', 'completed');
-            })
-            ->when($filters['search'] ?? null, function (Builder $query, string $search) {
-                $query->where(function (Builder $nested) use ($search) {
-                    $nested->where('reference_no', 'like', "%{$search}%")
-                        ->orWhere('request_type', 'like', "%{$search}%")
-                        ->orWhere('submitter_name', 'like', "%{$search}%")
-                        ->orWhere('branch', 'like', "%{$search}%")
-                        ->orWhereHas('dealer', fn (Builder $dealer) => $dealer->where('name', 'like', "%{$search}%"));
-                });
+            ->with(['dealer', 'assignedSupport', 'assignedManager', 'requestFiles', 'workOrderFiles', 'serviceReportFiles']);
+
+        $stage = $filters['stage'] ?? null;
+        $status = $filters['status'] ?? null;
+
+        if (! empty($stage) && $stage !== 'all') {
+            if ($stage === 'not_acknowledged' || $stage === 'for_acknowledgement') {
+                $query->notAcknowledged();
+            } elseif (! empty($status) && $status !== 'all') {
+                $query->stageStatus($stage, $status);
+            } else {
+                $query->atWorkflowStage($stage);
+            }
+        } elseif (! empty($status) && $status !== 'all') {
+            if ($status === 'overdue' || $status === 'aging') {
+                $query->overdue();
+            } elseif ($status === 'not_acknowledged' || $status === 'for_acknowledgement') {
+                $query->notAcknowledged();
+            } elseif ($status === 'in_progress' || $status === 'work_in_progress' || $status === 'on_going') {
+                $query->whereIn('status', ['on_going', 'in_progress']);
+            } elseif ($status === 'pending') {
+                $query->pendingRequest();
+            } else {
+                $query->where('status', $status);
+            }
+        } elseif ($status === 'completed') {
+            $query->where('status', 'completed');
+        }
+
+        $query->when($filters['search'] ?? null, function (Builder $query, string $search) {
+            $query->where(function (Builder $nested) use ($search) {
+                $nested->where('reference_no', 'like', "%{$search}%")
+                    ->orWhere('request_type', 'like', "%{$search}%")
+                    ->orWhere('submitter_name', 'like', "%{$search}%")
+                    ->orWhere('branch', 'like', "%{$search}%")
+                    ->orWhereHas('dealer', fn (Builder $dealer) => $dealer->where('name', 'like', "%{$search}%"));
             });
+        });
 
         $this->applyDatePeriod($query, $filters);
 

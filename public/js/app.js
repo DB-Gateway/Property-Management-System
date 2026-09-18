@@ -590,4 +590,107 @@ document.addEventListener('DOMContentLoaded', () => {
 
         syncDropdowns(null);
     });
+
+    // Quick Filtering via Dashboard Stats (Reports & Requests pages)
+    const quickFilterForm = document.querySelector('#report-filter-form') || document.querySelector('#requests-filter-form');
+    if (quickFilterForm) {
+        document.querySelectorAll('[data-report-quick-filter]').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                if (event.ctrlKey || event.metaKey || event.button === 1) return;
+
+                event.preventDefault();
+
+                const targetStage = btn.dataset.quickStage ?? '';
+                const targetStatus = btn.dataset.quickStatus ?? '';
+                const isCurrentlyActive = btn.dataset.isActive === '1';
+
+                const isReports = quickFilterForm.id === 'report-filter-form';
+                const stageSelect = quickFilterForm.querySelector('#stage') || quickFilterForm.querySelector('#request-filter-stage') || quickFilterForm.querySelector('[name="stage"]');
+                const statusSelect = quickFilterForm.querySelector('#status') || quickFilterForm.querySelector('#request-filter-status') || quickFilterForm.querySelector('[name="status"]');
+
+                if (isCurrentlyActive) {
+                    if (stageSelect) stageSelect.value = '';
+                    if (statusSelect) statusSelect.value = isReports ? 'all' : '';
+                } else {
+                    if (!isReports && targetStatus === 'not_acknowledged') {
+                        if (stageSelect) stageSelect.value = 'not_acknowledged';
+                        if (statusSelect) statusSelect.value = '';
+                    } else {
+                        if (stageSelect) stageSelect.value = targetStage;
+                        if (statusSelect) statusSelect.value = (targetStatus === 'all' && !isReports) ? '' : targetStatus;
+                    }
+                }
+
+                stageSelect?.closest('.rfg-field, .filter-field')?.classList.toggle('is-active', Boolean(stageSelect?.value && stageSelect?.value !== 'all'));
+                statusSelect?.closest('.rfg-field, .filter-field')?.classList.toggle('is-active', Boolean(statusSelect?.value && statusSelect?.value !== 'all'));
+
+                quickFilterForm.submit();
+            });
+        });
+
+        const clearQuickFilterBtn = document.querySelector('[data-clear-quick-filter]');
+        clearQuickFilterBtn?.addEventListener('click', (event) => {
+            if (event.ctrlKey || event.metaKey || event.button === 1) return;
+            event.preventDefault();
+
+            const isReports = quickFilterForm.id === 'report-filter-form';
+            const stageSelect = quickFilterForm.querySelector('#stage') || quickFilterForm.querySelector('#request-filter-stage') || quickFilterForm.querySelector('[name="stage"]');
+            const statusSelect = quickFilterForm.querySelector('#status') || quickFilterForm.querySelector('#request-filter-status') || quickFilterForm.querySelector('[name="status"]');
+
+            if (stageSelect) stageSelect.value = '';
+            if (statusSelect) statusSelect.value = isReports ? 'all' : '';
+
+            quickFilterForm.submit();
+        });
+
+        const stageSelect = quickFilterForm.querySelector('#stage') || quickFilterForm.querySelector('#request-filter-stage');
+        const statusSelect = quickFilterForm.querySelector('#status') || quickFilterForm.querySelector('#request-filter-status');
+
+        stageSelect?.addEventListener('change', () => {
+            stageSelect.closest('.rfg-field, .filter-field')?.classList.toggle('is-active', Boolean(stageSelect.value && stageSelect.value !== 'all'));
+        });
+
+        statusSelect?.addEventListener('change', () => {
+            statusSelect.closest('.rfg-field, .filter-field')?.classList.toggle('is-active', Boolean(statusSelect.value && statusSelect.value !== 'all'));
+        });
+    }
+
+    // Dynamic active state toggling for all filter-bar fields (Requests, Dealers)
+    document.querySelectorAll('.filter-bar .filter-field').forEach((field) => {
+        const control = field.querySelector('input, select');
+        if (!control) return;
+
+        const updateActive = () => {
+            const val = control.value?.trim() ?? '';
+            const isActive = val !== '' && val !== 'all';
+            field.classList.toggle('is-active', isActive);
+
+            const form = field.closest('form');
+            if (form) {
+                const resetBtn = form.querySelector('a.button-light');
+                if (resetBtn) {
+                    const anyActive = Array.from(form.querySelectorAll('.filter-field.is-active')).length > 0;
+                    resetBtn.classList.toggle('has-active', anyActive);
+                }
+            }
+        };
+
+        control.addEventListener('change', updateActive);
+        control.addEventListener('input', updateActive);
+    });
+
+    // Dynamic active state toggling for all report-filter-grid fields
+    document.querySelectorAll('.report-filter-grid .rfg-field').forEach((field) => {
+        const control = field.querySelector('input, select');
+        if (!control) return;
+
+        const updateActive = () => {
+            const val = control.value?.trim() ?? '';
+            const isActive = val !== '' && val !== 'all';
+            field.classList.toggle('is-active', isActive);
+        };
+
+        control.addEventListener('change', updateActive);
+        control.addEventListener('input', updateActive);
+    });
 });

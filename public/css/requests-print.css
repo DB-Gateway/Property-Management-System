@@ -1,0 +1,53 @@
+/* Loaded on requests list. Reuse the on-screen table. */
+.requests-print-summary { display: none; }
+
+@media print {
+    @page { size: A4 landscape; margin: 10mm; }
+
+    html, body.app-shell { min-height: 0; background: #fff; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body > :not(.main-area),
+    .main-area > :not(.page-content),
+    .page-content > :not(#requests-panel),
+    #print-requests,
+    #export-requests,
+    .requests-actions,
+    #requests-filter-form,
+    #requests-panel > .pagination-wrap { display: none !important; }
+
+    .main-area { min-height: 0; margin: 0; }
+    .page-content { padding: 0; }
+    #requests-panel { box-shadow: none; }
+    .requests-heading { min-height: 0; padding: 12px 17px; }
+    .requests-heading, .requests-print-summary {
+        break-inside: avoid;
+        break-after: avoid;
+    }
+    .requests-print-summary {
+        display: block;
+        padding: 12px 17px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 10px;
+        overflow-wrap: anywhere;
+    }
+    .requests-print-filters { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+    .requests-print-summary p { margin: 6px 0 0; }
+    #requests-panel .table-scroll { overflow: visible; }
+    #requests-panel .requests-table { width: 100%; min-width: 0; table-layout: fixed; }
+    .requests-table th, .requests-table td { padding: 10px 8px; overflow-wrap: anywhere; }
+    .requests-table th { white-space: normal; }
+    .requests-table th:nth-child(1) { width: 13%; }
+    .requests-table th:nth-child(2) { width: 17%; }
+    .requests-table th:nth-child(3) { width: 14%; }
+    .requests-table th:nth-child(4) { width: 8%; }
+    .requests-table th:nth-child(5) { width: 12%; }
+    .requests-table th:nth-child(6) { width: 12%; }
+    .requests-table th:nth-child(7) { width: 24%; }
+    .requests-table .badge { max-width: 100%; white-space: normal; }
+    .requests-table .activity-progress-cell,
+    .requests-table .activity-progress-compact { min-width: 0; }
+    .requests-table .activity-progress-step { grid-template-columns: 8px minmax(0, 1fr) auto; }
+    .requests-table thead { display: table-header-group; }
+    .requests-table tr { break-inside: avoid; page-break-inside: avoid; }
+}

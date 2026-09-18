@@ -1,0 +1,47 @@
+.notification-bell { position: relative; margin-right: 18px; color: #4b5563; }
+.notification-bell > summary { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #e5e7eb; border-radius: 50%; cursor: pointer; list-style: none; background: #fff; }
+.notification-bell > summary::-webkit-details-marker { display: none; }
+.notification-bell > summary:hover, .notification-bell[open] > summary { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.notification-bell > summary:focus-visible, .notification-panel button:focus-visible, .notification-item:focus-visible { outline: 3px solid #f87171; outline-offset: 3px; }
+.notification-badge { position: absolute; top: -4px; right: -5px; min-width: 19px; height: 19px; display: grid; place-items: center; background: #c82026; color: white; border-radius: 12px; padding: 0 4px; font-size: 10px; font-weight: 800; border: 2px solid white; }
+.notification-panel { position: absolute; top: 54px; right: 0; width: min(410px, calc(100vw - 28px)); max-height: calc(100dvh - 100px); overflow: auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 15px 45px #11182726; z-index: 100; }
+.notification-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px; border-bottom: 1px solid #eee; }
+.notification-head h2 { font-size: 16px; margin: 0; color: #1f2937; }
+.notification-panel button { border: 0; background: none; color: #b91c1c; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 0; }
+.notification-panel button:disabled { opacity: .5; cursor: default; }
+.notification-item { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #eee; border-left: 3px solid transparent; text-decoration: none; color: #4b5563; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.notification-copy { display: grid; gap: 6px; min-width: 0; }
+.notification-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; color: #047857; background: #ecfdf5; }
+.notification-icon-new_request { color: #2563eb; background: #eff6ff; }
+.notification-icon-work_order { color: #0369a1; background: #e0f2fe; }
+.notification-icon-service_report { color: #7c3aed; background: #f5f3ff; }
+.notification-icon-schedule_changed { color: #4f46e5; background: #eef2ff; }
+.notification-icon-upcoming { color: #b45309; background: #fffbeb; }
+.notification-icon-ageing { color: #b91c1c; background: #fee2e2; }
+.notification-item strong { font-size: 13px; color: #1f2937; }
+.notification-item small { font-size: 10px; color: #6b7280; }
+.notification-item.is-unread { background: #fff8f8; border-left-color: #b91c1c; }
+.notification-item.is-ageing strong { color: #b91c1c; }
+.notification-item:hover { background: #f3f4f6; }
+.notification-empty { padding: 25px 20px; text-align: center; font-size: 13px; line-height: 1.6; }
+.notification-feedback { padding: 0 18px; font-size: 12px; color: #b91c1c; }
+.notification-feedback:empty { display: none; }
+.notification-more { display: block; margin: 10px auto; }
+.notification-device { padding: 15px 18px; border-top: 1px solid #eee; background: #fafafa; font-size: 12px; }
+.notification-device p { font-size: 11px; line-height: 1.6; margin: 6px 0; }
+.push-prompt { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; margin-bottom: 24px; background: #fff; border: 1px solid #fecaca; border-left: 4px solid #b91c1c; border-radius: 10px; font-size: 13px; }
+.push-prompt p { margin: 5px 0 0; line-height: 1.6; color: #6b7280; }
+.push-prompt small { display: block; margin-top: 5px; color: #b91c1c; }
+.push-actions { display: flex; flex-shrink: 0; gap: 8px; }
+.workflow-card-body { padding: 18px; }
+.request-schedule-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; margin: 18px 0; }
+.request-schedule-note { font-size: 12px; color: #6b7280; line-height: 1.6; }
+.request-schedule-note.is-overdue { color: #b91c1c; font-weight: 600; }
+[hidden] { display: none !important; }
+@media(max-width: 700px) {
+    .notification-bell { margin-right: 10px; }
+    .notification-panel { position: fixed; right: 14px; top: 75px; }
+    .push-prompt { align-items: stretch; flex-direction: column; }
+    .push-actions { flex-wrap: wrap; }
+    .request-schedule-grid { grid-template-columns: 1fr; }
+}

@@ -10,7 +10,7 @@
 <div class="page-heading narrow-heading">
     <p class="eyebrow">USER MANAGEMENT</p>
     <h1>{{ $user->exists ? 'Edit User' : 'Create User' }}</h1>
-    <p>{{ $user->exists ? 'Update account information and branch access.' : 'Add an account and assign its role and branch.' }}</p>
+    <p>{{ $user->exists ? 'Update account information, role, and dealer assignment.' : 'Add an account and assign the correct role and dealer access.' }}</p>
 </div>
 
 <form class="panel form-panel" method="POST" action="{{ $user->exists ? route('admin.users.update', $user) : route('admin.users.store') }}">
@@ -36,17 +36,46 @@
                 </select>
                 @if($user->is(auth()->user()))<small>Your account must keep its Administrator role.</small>@endif
             </div>
-            <div class="form-field" hidden>
+            <div class="form-field" data-dealer-field @if(old('role', $user->role) !== 'dealer') hidden @endif>
                 <label for="dealer_id">Dealer / Branch <em data-dealer-required @if(old('role', $user->role) !== 'dealer') hidden @endif>*</em></label>
-                <select id="dealer_id" name="dealer_id" data-user-dealer @required(old('role', $user->role) === 'dealer') aria-describedby="dealer-help">
-                    <option value="">Select a branch / All areas for staff</option>
+                <select id="dealer_id" name="dealer_id" data-user-dealer data-user-editing="{{ $user->exists ? 'true' : 'false' }}" @required(old('role', $user->role) === 'dealer') aria-describedby="dealer-help">
+                    <option value="">Select a dealer / branch</option>
                     @foreach($dealers as $dealer)
-                        <option value="{{ $dealer->id }}" @selected((string) old('dealer_id', $user->dealer_id) === (string) $dealer->id)>{{ $dealer->name }}{{ $dealer->city ? ' / '.$dealer->city : '' }}</option>
+                        <option
+                            value="{{ $dealer->id }}"
+                            data-dealer-name="{{ $dealer->name }}"
+                            data-dealer-brand="{{ $dealer->brand }}"
+                            data-dealer-city="{{ $dealer->city }}"
+                            data-dealer-area="{{ $dealer->area }}"
+                            data-dealer-address="{{ $dealer->address }}"
+                            data-dealer-contact="{{ collect([$dealer->point_person_1, $dealer->contact_1, $dealer->point_person_2, $dealer->contact_2])->filter()->implode(' · ') }}"
+                            data-dealer-edit-url="{{ route('dealers.edit', $dealer) }}"
+                            @selected((string) old('dealer_id', $user->dealer_id) === (string) $dealer->id)
+                        >{{ $dealer->name }}{{ $dealer->city ? ' / '.$dealer->city : '' }}{{ $dealer->brand ? ' / '.$dealer->brand : '' }}</option>
                     @endforeach
                 </select>
-                <small id="dealer-help">Required for Dealer accounts. Staff can be assigned to all areas.</small>
+                <small id="dealer-help">Required for Dealer accounts. This determines which branch and requests the user can access.</small>
             </div>
         </div>
+
+        <section class="dealer-information" data-dealer-information hidden aria-live="polite">
+            <div class="dealer-information-heading">
+                <div>
+                    <p class="eyebrow">ASSIGNED DEALER</p>
+                    <h3 data-dealer-info-name></h3>
+                </div>
+                @if($user->exists)
+                    <a class="button button-light" href="#" data-dealer-edit-link hidden>Edit Dealer Information</a>
+                @endif
+            </div>
+            <dl class="dealer-information-grid">
+                <div><dt>Brand</dt><dd data-dealer-info-brand>—</dd></div>
+                <div><dt>Branch (City)</dt><dd data-dealer-info-city>—</dd></div>
+                <div><dt>Area</dt><dd data-dealer-info-area>—</dd></div>
+                <div><dt>Address</dt><dd data-dealer-info-address>—</dd></div>
+                <div class="dealer-information-wide"><dt>Contacts</dt><dd data-dealer-info-contact>—</dd></div>
+            </dl>
+        </section>
     </div>
     @unless($user->exists)
         <div class="preset-password-note">

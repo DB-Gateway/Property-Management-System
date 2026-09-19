@@ -118,6 +118,11 @@ class UserController extends Controller
 
     private function validatedUser(Request $request, ?User $user = null): array
     {
+        $request->merge([
+            'name' => trim((string) $request->input('name')),
+            'email' => Str::lower(trim((string) $request->input('email'))),
+        ]);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user)],
@@ -130,7 +135,7 @@ class UserController extends Controller
 
         return [
             ...$data,
-            'dealer_id' => $data['dealer_id'] ?? null,
+            'dealer_id' => $data['role'] === 'dealer' ? ($data['dealer_id'] ?? null) : null,
             'designation' => User::ROLES[$data['role']],
         ];
     }

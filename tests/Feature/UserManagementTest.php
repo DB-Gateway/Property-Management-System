@@ -38,6 +38,7 @@ class UserManagementTest extends TestCase
             $this->assertTrue($user->must_change_password);
             $this->assertTrue($user->is_active);
             $this->assertSame($label, $user->designation);
+            $this->assertSame($role === 'dealer' ? $dealer->id : null, $user->dealer_id);
             $this->assertDatabaseHas('audit_logs', ['action' => 'user_created', 'subject_id' => $user->id]);
 
             $hash = $user->password;
@@ -49,6 +50,32 @@ class UserManagementTest extends TestCase
             $this->assertSame($hash, $user->fresh()->password);
             $this->assertTrue($user->fresh()->must_change_password);
         }
+    }
+
+    public function test_dealer_fields_and_information_edit_option_are_available_on_user_forms(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $dealer = $this->dealer();
+        $dealer->update([
+            'address' => '123 Test Avenue',
+            'point_person_1' => 'Juan Dela Cruz',
+            'contact_1' => '0917 123 4567',
+        ]);
+        $dealerUser = User::factory()->create(['role' => 'dealer', 'dealer_id' => $dealer->id]);
+
+        $this->actingAs($admin)->get(route('admin.users.create'))
+            ->assertOk()
+            ->assertSee('Dealer / Branch')
+            ->assertSee('This determines which branch and requests the user can access.')
+            ->assertSee($dealer->name)
+            ->assertDontSee('Edit Dealer Information');
+
+        $this->get(route('admin.users.edit', $dealerUser))
+            ->assertOk()
+            ->assertSee('Edit Dealer Information')
+            ->assertSee(route('dealers.edit', $dealer), false)
+            ->assertSee('123 Test Avenue')
+            ->assertSee('Juan Dela Cruz');
     }
 
     public function test_guests_and_non_admins_cannot_manage_users(): void
@@ -78,6 +105,8 @@ class UserManagementTest extends TestCase
         $data = ['name' => 'New User', 'email' => 'new@example.com', 'role' => 'dealer'];
         $this->post(route('admin.users.store'), [...$data, 'name' => '', 'email' => $admin->email, 'role' => 'invalid'])
             ->assertSessionHasErrors(['name', 'email', 'role']);
+        $this->post(route('admin.users.store'), [...$data, 'email' => strtoupper($admin->email), 'role' => 'pm_manager'])
+            ->assertSessionHasErrors('email');
         $this->post(route('admin.users.store'), $data)->assertSessionHasErrors('dealer_id');
         $this->post(route('admin.users.store'), [...$data, 'dealer_id' => 999999])->assertSessionHasErrors('dealer_id');
         $this->post(route('admin.users.store'), [...$data, 'role' => 'pm_manager'])->assertSessionHasNoErrors();

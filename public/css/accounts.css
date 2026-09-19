@@ -4,6 +4,15 @@
 .preset-password-note { margin-top: 20px; padding: 16px; border: 1px solid #c5d9fa; border-radius: 8px; background: #f3f7ff; line-height: 1.6; }
 .preset-password-note code { font-size: 14px; }
 .preset-password-note p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.dealer-information { margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.dealer-information-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.dealer-information-heading .eyebrow { margin-bottom: 4px; }
+.dealer-information-heading h3 { margin: 0; font: 700 16px/1.35 Montserrat, Inter, sans-serif; }
+.dealer-information-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 0; }
+.dealer-information-grid div { min-width: 0; }
+.dealer-information-grid dt { margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.dealer-information-grid dd { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.dealer-information-wide { grid-column: 1 / -1; }
 .account-dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 28px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: #fff; box-shadow: 0 24px 80px rgba(4,21,35,.25); }
 .account-dialog::backdrop { background: rgba(4,21,35,.65); backdrop-filter: blur(4px); }
 .account-dialog h1, .account-dialog h2 { margin: 10px 0 12px; font: 800 24px/1.25 Montserrat, Inter, sans-serif; }
@@ -17,4 +26,7 @@
 @media (max-width: 520px) {
     .account-dialog { padding: 22px 18px; }
     .account-dialog h1 { font-size: 22px; }
+    .dealer-information-heading { align-items: stretch; flex-direction: column; }
+    .dealer-information-grid { grid-template-columns: 1fr; }
+    .dealer-information-wide { grid-column: auto; }
 }

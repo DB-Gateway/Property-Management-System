@@ -11,16 +11,19 @@ class PMSupportSeeder extends Seeder
     public function run(): void
     {
         // 1. Ensure the single Dial-A user exists
-        $dialA = User::updateOrCreate(
-            ['email' => 'diala@gateway.com'],
+        $dialA = User::where('email', 'dial.handyman@gateway.ph')->first()
+            ?? User::where('email', 'diala@gateway.com')->where('role', 'dial_a')->first()
+            ?? new User;
+        $dialA->fill(
             [
+                'email' => 'dial.handyman@gateway.ph',
                 'name' => 'Dial-A',
                 'designation' => 'Dial-A / Property Management Support',
                 'role' => 'dial_a',
                 'is_active' => true,
                 'password' => Hash::make('Gateway@2026'),
             ]
-        );
+        )->save();
 
         // 2. Re-assign any existing requests to Dial-A
         \App\Models\PropertyRequest::whereNull('assigned_support_id')

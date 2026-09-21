@@ -6,7 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 
 class RequestAttachment extends Model
 {
-    protected $fillable = ['property_request_id', 'category', 'path', 'original_name', 'mime_type', 'size'];
+    protected $fillable = ['property_request_id', 'category', 'path', 'original_name', 'mime_type', 'size', 'uploaded_by_id', 'uploaded_by_name', 'uploaded_by_role'];
+
+    public function getUploaderLabelAttribute(): ?string
+    {
+        return $this->uploaded_by_role
+            ? (User::ROLES[$this->uploaded_by_role] ?? $this->uploaded_by_role).($this->uploaded_by_name ? ' — '.$this->uploaded_by_name : '')
+            : null;
+    }
 
     public function propertyRequest()
     {

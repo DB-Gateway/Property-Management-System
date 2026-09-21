@@ -206,7 +206,8 @@ class GatewaySystemTest extends TestCase
 
         $this->actingAs($manager)->get(route('requests.show', $propertyRequest))
             ->assertOk()
-            ->assertSee('PM Manager View-Only Access')
+            ->assertSee('PM Manager Workflow Controls')
+            ->assertSee('Request Assignment')
             ->assertDontSee('Acknowledge &amp; Approve', false)
             ->assertDontSee('Acknowledgement &amp; Approval', false);
         $this->actingAs($dialA)->get(route('requests.show', $propertyRequest))
@@ -322,11 +323,12 @@ class GatewaySystemTest extends TestCase
         $manager = User::factory()->create(['role' => 'pm_manager']);
         $propertyRequest = $this->propertyRequest($dealer, $dealerUser);
 
-        $this->actingAs($manager)->get(route('dashboard'))->assertOk()->assertSee('PM Manager Dashboard');
+        $this->actingAs($manager)->get(route('dashboard'))->assertOk()->assertSee('Recent Request Activity');
         $this->actingAs($manager)->get(route('requests.index'))->assertOk()->assertSee($propertyRequest->reference_no);
         $this->actingAs($manager)->get(route('requests.show', $propertyRequest))
             ->assertOk()
-            ->assertSee('PM Manager View-Only Access')
+            ->assertSee('PM Manager Workflow Controls')
+            ->assertSee('Request Assignment')
             ->assertDontSee('Acknowledge &amp; Approve', false)
             ->assertDontSee('Acknowledgement &amp; Approval', false);
         $this->actingAs($manager)->get(route('dealers.index'))->assertOk();
@@ -566,12 +568,12 @@ class GatewaySystemTest extends TestCase
             $this->actingAs($manager)->get($url)->assertOk();
         }
 
-        $dealer = User::where('email', 'dealer@gateway.com')->firstOrFail();
+        $dealer = User::where('email', 'dealer.mitsubishi-pasig@gateway.ph')->firstOrFail();
         foreach ([route('dashboard'), route('requests.index'), route('requests.create'), route('profile.edit')] as $url) {
             $this->actingAs($dealer)->get($url)->assertOk();
         }
 
-        $ownRequest = PropertyRequest::where('submitted_by', $dealer->id)->firstOrFail();
+        $ownRequest = $this->propertyRequest($dealer->dealer, $dealer);
         $this->actingAs($dealer)->get(route('requests.show', $ownRequest))->assertOk();
     }
 
@@ -716,7 +718,7 @@ class GatewaySystemTest extends TestCase
             ->assertSee('service_report.pdf');
     }
 
-    public function test_dealer_request_auto_assigns_to_designated_dial_lead_and_dial_lead_conducts_with_representatives(): void
+    public function test_pm_review_assigns_dealer_request_to_dial_a_before_inspection(): void
     {
         $dealer = $this->dealer();
         $dealerUser = User::factory()->create(['dealer_id' => $dealer->id, 'role' => 'dealer']);
@@ -733,13 +735,22 @@ class GatewaySystemTest extends TestCase
         ])->assertRedirect();
 
         $request = PropertyRequest::latest()->firstOrFail();
-        $this->assertSame($designatedLead->id, $request->assigned_support_id);
+        $this->assertNull($request->assigned_support_id);
+        $this->assertTrue($request->isAwaitingPmReview());
         $this->assertSame('pending', $request->status);
+
+        $this->actingAs($designatedLead)->get(route('requests.show', $request))->assertForbidden();
+        $this->actingAs($manager)->patch(route('requests.assignment.update', $request), [
+            'assignment_type' => 'dial_a', 'priority' => 'urgent', 'remarks' => 'Inspection is needed for an electrical safety risk.',
+            'current_password' => 'password',
+        ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertSame($designatedLead->id, $request->fresh()->assigned_support_id);
 
         // 2. PM Manager views request: strictly view-only, no acknowledgement approval form
         $this->actingAs($manager)->get(route('requests.show', $request))
             ->assertOk()
-            ->assertSee('PM Manager View-Only Access')
+            ->assertSee('PM Manager Workflow Controls')
+            ->assertSee('Request Assignment')
             ->assertDontSee('Acknowledge &amp; Approve', false)
             ->assertDontSee('Acknowledgement &amp; Approval', false);
 
@@ -862,7 +873,7 @@ class GatewaySystemTest extends TestCase
         $this->assertNotNull($request->completed_at);
     }
 
-    public function test_pm_manager_is_view_only_and_report_printing_always_includes_actual_picture_of_request_attachment(): void
+    public function test_pm_manager_monitors_dial_a_and_report_printing_includes_request_photos(): void
     {
         Storage::fake('local');
 
@@ -927,10 +938,11 @@ class GatewaySystemTest extends TestCase
             'approved_date' => today()->format('Y-m-d'),
         ])->assertForbidden();
 
-        // 3. Verify PM Manager views request: strictly view-only, no acknowledgement approval form
+        // 3. PM Manager can assign requests, while Dial-A retains its own workflow actions.
         $this->actingAs($manager)->get(route('requests.show', $request))
             ->assertOk()
-            ->assertSee('PM Manager View-Only Access')
+            ->assertSee('PM Manager Workflow Controls')
+            ->assertSee('Request Assignment')
             ->assertDontSee('Acknowledge &amp; Approve', false)
             ->assertDontSee('Pending Acknowledgement')
             ->assertSee('Inspection Details')
@@ -975,9 +987,9 @@ class GatewaySystemTest extends TestCase
         $admin = User::where('role', 'admin')->firstOrFail();
         $support = User::whereIn('role', ['dial_a', 'pm_support'])->firstOrFail();
         $manager = User::where('role', 'pm_manager')->firstOrFail();
-        $dealerUser = User::where('email', 'dealer@gateway.com')->firstOrFail();
+        $dealerUser = User::where('email', 'dealer.mitsubishi-pasig@gateway.ph')->firstOrFail();
 
-        $propertyRequest = PropertyRequest::where('submitted_by', $dealerUser->id)->firstOrFail();
+        $propertyRequest = $this->propertyRequest($dealerUser->dealer, $dealerUser);
         $propertyRequest->update([
             'assigned_support_id' => $support->id,
             'request_type' => 'Plumbing Works',
@@ -1322,7 +1334,7 @@ class GatewaySystemTest extends TestCase
         $this->actingAs($dialA)->get(route('requests.show', $request))
             ->assertOk()
             ->assertSee('Request Completed')
-            ->assertSee('The request was confirmed and officially completed by Dial-A');
+            ->assertSee('Service Report completed and request closed by Dial-A.');
     }
 
     public function test_only_administrator_can_undo_each_workflow_step_and_later_steps_are_reopened(): void
@@ -1385,7 +1397,7 @@ class GatewaySystemTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($admin)
-            ->patch(route('requests.workflow.undo', [$propertyRequest, 'completion']))
+            ->patch(route('requests.workflow.undo', [$propertyRequest, 'completion']), ['current_password' => 'password'])
             ->assertRedirect()
             ->assertSessionHas('status', 'Request Completion was undone. Uploaded files and entered details were kept.');
 
@@ -1399,7 +1411,7 @@ class GatewaySystemTest extends TestCase
             'completed_at' => now(),
         ]);
         $this->actingAs($admin)
-            ->patch(route('requests.workflow.undo', [$propertyRequest, 'service-report']))
+            ->patch(route('requests.workflow.undo', [$propertyRequest, 'service-report']), ['current_password' => 'password'])
             ->assertRedirect();
 
         $propertyRequest->refresh();
@@ -1416,7 +1428,7 @@ class GatewaySystemTest extends TestCase
             'status' => 'completed',
         ]);
         $this->actingAs($admin)
-            ->patch(route('requests.workflow.undo', [$propertyRequest, 'work-order']))
+            ->patch(route('requests.workflow.undo', [$propertyRequest, 'work-order']), ['current_password' => 'password'])
             ->assertRedirect();
 
         $propertyRequest->refresh();
@@ -1434,7 +1446,7 @@ class GatewaySystemTest extends TestCase
             'status' => 'completed',
         ]);
         $this->actingAs($admin)
-            ->patch(route('requests.workflow.undo', [$propertyRequest, 'inspection']))
+            ->patch(route('requests.workflow.undo', [$propertyRequest, 'inspection']), ['current_password' => 'password'])
             ->assertRedirect();
 
         $propertyRequest->refresh();
@@ -1453,7 +1465,7 @@ class GatewaySystemTest extends TestCase
         $this->assertSame(4, AuditLog::where('action', 'workflow_step_undone')->count());
 
         $this->actingAs($admin)
-            ->patch(route('requests.workflow.undo', [$propertyRequest, 'inspection']))
+            ->patch(route('requests.workflow.undo', [$propertyRequest, 'inspection']), ['current_password' => 'password'])
             ->assertSessionHasErrors('workflow');
     }
 

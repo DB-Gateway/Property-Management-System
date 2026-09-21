@@ -280,12 +280,13 @@
                         <td class="nowrap">{{ $item->request_date->format('M d, Y') }}</td>
                         <td class="nowrap">{{ $item->completed_at?->format('M d, Y') ?? '—' }}</td>
                         <td><span class="badge status-{{ $item->status }}">{{ ucfirst(str_replace('_', ' ', $item->status)) }}</span></td>
-                        <td><span class="badge priority-{{ $item->priority }}">{{ ucfirst($item->priority) }}</span></td>
+                        <td><span class="badge priority-{{ $item->priority }}">{{ $item->priority_label }}</span></td>
                         <td class="report-attachments-col">
+                            @php($reportFiles = $item->attachments->filter(fn ($file) => $file->category === 'request' || ($item->isInHouse() ? $file->category === 'in_house_completion' : $file->category !== 'in_house_completion')))
                             <div class="report-attachments-cell">
-                                @if($item->attachments->isNotEmpty())
+                                @if($reportFiles->isNotEmpty())
                                     <div class="attachment-chips">
-                                        @foreach($item->attachments as $file)
+                                        @foreach($reportFiles as $file)
                                             <a class="attachment-chip" href="{{ route('attachments.show', $file) }}" target="_blank" rel="noopener" title="{{ $file->original_name }} ({{ number_format($file->size / 1024, 1) }} KB)">
                                                 @if($file->isImage())
                                                     <img class="chip-img" src="{{ route('attachments.show', $file) }}" alt="{{ $file->original_name }}">

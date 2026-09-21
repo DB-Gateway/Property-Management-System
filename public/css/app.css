@@ -97,6 +97,7 @@ button, select { cursor: pointer; }
 .compact-auth .login-logo { width: 65px; height: 65px; }
 .compact-auth h1 { font-size: 20px; letter-spacing: 2px; }
 .back-login { display: block; margin-top: 20px; text-align: center; font-size: 12px; color: #c8d1db; }
+.auth-help { margin: 16px 0 0; color: #aeb9c6; font-size: 11px; line-height: 1.55; text-align: center; }
 
 /* Primary sign-in page */
 .visually-hidden {
@@ -1415,6 +1416,50 @@ a.stat-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(18
     .rfg-search, .rfg-date-period, .rfg-period-value, .rfg-stage, .rfg-status, .rfg-priority, .rfg-area, .rfg-brand, .rfg-type, .rfg-actions {
         grid-column: span 1;
     }
+}
+
+.assignment-panel-body { padding: 4px 24px 24px; }
+.assignment-route-badge { margin-left: auto; border-radius: 20px; background: #edf2f7; color: #42566e; padding: 5px 12px; font-size: 12px; font-weight: 700; }
+.assignment-route-badge.assignment-in-house { background: #e9f1ff; color: #2455a0; }
+.assignment-attribution { margin: 8px 0; font-size: 13px; line-height: 1.6; color: #52657d; overflow-wrap: anywhere; }
+.assignment-attribution strong { color: #20364e; }
+.assignment-attribution > span { display: inline-block; margin-left: 10px; color: #6e8095; font-size: 12px; }
+.assignment-date { margin: 4px 0 10px; color: #6e8095; font-size: 12px; }
+.assignment-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: end; margin-top: 18px; }
+.assignment-remarks { grid-column: 1 / -1; }
+.assignment-form textarea { width: 100%; box-sizing: border-box; }
+.pm-confirmation-dialog { border: 0; border-radius: 14px; padding: 26px; width: min(480px, calc(100vw - 32px)); max-height: 90vh; box-sizing: border-box; color: #20364e; box-shadow: 0 20px 70px #0004; }
+.pm-confirmation-dialog::backdrop { background: #10243899; }
+.pm-confirmation-dialog h2 { margin: 0 0 12px; font-size: 19px; }
+.pm-confirmation-dialog p { line-height: 1.6; }
+#pmConfirmationSummary, #pmConfirmationError { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pm-confirmation-dialog .form-field { margin-top: 18px; }
+.pm-remember-option { display: flex; align-items: center; gap: 9px; margin: 16px 0 8px; font-size: 13px; }
+.pm-confirmation-dialog .admin-password-actions { margin-top: 22px; }
+.pm-confirmation-dialog [hidden] { display: none !important; }
+.assignment-form .form-field, .in-house-detail-form .form-field { margin: 0; min-width: 0; }
+.assignment-form select, .assignment-form input, .in-house-detail-form input, .in-house-detail-form textarea { width: 100%; box-sizing: border-box; }
+.assignment-form > .button, .in-house-form-actions > .button { min-height: 42px; }
+.assignment-form-help { color: #687b92; font-size: 12px; line-height: 1.6; margin: 0; }
+.assignment-form > .assignment-form-help { grid-column: 1 / -1; }
+.in-house-workflow { margin-top: 24px; border-top: 1px solid #e3eaf2; }
+.in-house-step { padding: 22px 0; border-bottom: 1px solid #e3eaf2; }
+.in-house-step:last-child { padding-bottom: 0; border-bottom: 0; }
+.in-house-step-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.in-house-step-heading h3 { font-size: 14px; margin: 0; color: #20364e; }
+.in-house-step-heading .stage-status { margin-left: auto; }
+.in-house-step-number { display: grid; place-items: center; width: 27px; height: 27px; flex-shrink: 0; border-radius: 50%; background: #edf2f8; color: #425d7b; font-size: 12px; font-weight: 700; }
+.in-house-detail-form { display: grid; gap: 12px; margin-top: 16px; }
+.in-house-detail-form textarea { resize: vertical; min-height: 110px; }
+.in-house-form-actions { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.in-house-form-actions .form-field { flex: 1; max-width: 380px; }
+.in-house-work-order-text { padding: 14px 16px; background: #f7f9fc; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; color: #334b65; }
+@media (max-width: 780px) {
+    .assignment-panel-body { padding: 4px 16px 20px; }
+    .assignment-form { grid-template-columns: 1fr; }
+    .in-house-form-actions { align-items: stretch; flex-direction: column; }
+    .in-house-form-actions .form-field { max-width: none; }
+    .assignment-attribution > span { display: block; margin-left: 0; }
 }
 
 @media print {

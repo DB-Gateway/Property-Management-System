@@ -228,7 +228,7 @@
                     ]);
                 }
             }
-            foreach ($item->workOrderFiles as $file) {
+            foreach (($item->isInHouse() ? collect() : $item->workOrderFiles) as $file) {
                 if ($file->isImage()) {
                     $allImageAttachments->push([
                         'file' => $file,
@@ -239,7 +239,7 @@
                     ]);
                 }
             }
-            foreach ($item->serviceReportFiles as $file) {
+            foreach (($item->isInHouse() ? collect() : $item->serviceReportFiles) as $file) {
                 if ($file->isImage()) {
                     $allImageAttachments->push([
                         'file' => $file,
@@ -248,6 +248,19 @@
                         'category_badge' => 'Service Report Attachment',
                         'pill_class' => 'pill-service-report',
                     ]);
+                }
+            }
+            if ($item->isInHouse()) {
+                foreach ($item->inHouseCompletionFiles as $file) {
+                    if ($file->isImage()) {
+                        $allImageAttachments->push([
+                            'file' => $file,
+                            'request' => $item,
+                            'category_title' => 'In house Completion Report',
+                            'category_badge' => 'Completion Report Attachment',
+                            'pill_class' => 'pill-service-report',
+                        ]);
+                    }
                 }
             }
         }
@@ -264,7 +277,7 @@
             <div class="report-title">
                 <h1>Requests Operations Report</h1>
                 <p>Published {{ now()->format('M d, Y h:i A') }}</p>
-                <p>Prepared by {{ $generatedBy->name }}, PM Manager</p>
+                <p>Prepared by {{ $generatedBy->name }}, {{ $generatedBy->role_label }}</p>
             </div>
         </header>
 
@@ -273,7 +286,7 @@
             <div><span>Urgent Priority</span><strong>{{ $summary['urgent'] }}</strong></div>
             <div><span>Regular Priority</span><strong>{{ $summary['regular'] }}</strong></div>
             <div><span>Request Attachments</span><strong>{{ $summary['request_attachments'] ?? $requests->sum(fn($r) => $r->requestFiles->count()) }}</strong></div>
-            <div><span>Dial-A Attachments</span><strong>{{ $summary['dial_a_attachments'] }}</strong><span style="font-size: 8px; color: #72869c; display: block; margin-top: 2px;">({{ $summary['work_order_files'] }} WO · {{ $summary['service_report_files'] }} SR)</span></div>
+            <div><span>Workflow Attachments</span><strong>{{ $summary['workflow_attachments'] }}</strong><span style="font-size: 8px; color: #72869c; display: block; margin-top: 2px;">({{ $summary['work_order_files'] }} WO · {{ $summary['service_report_files'] }} SR &middot; {{ $summary['in_house_completion_files'] }} In house)</span></div>
         </section>
 
         <p class="filters"><strong>Filters:</strong>
@@ -300,8 +313,8 @@
                     <th>Request Photos / Attachments</th>
                     <th>Priority</th>
                     <th>Status</th>
-                    <th>Assigned Dial-A</th>
-                    <th>Dial-A Attachments (Work Order &amp; Service Report)</th>
+                    <th>Assigned to</th>
+                    <th>Workflow Details &amp; Attachments</th>
                     <th>Submitted By</th>
                 </tr>
             </thead>
@@ -339,10 +352,27 @@
                                 <span class="print-none-text">No request attachments</span>
                             @endif
                         </td>
-                        <td><span class="badge badge-{{ $item->priority }}">{{ ucfirst($item->priority) }}</span></td>
+                        <td><span class="badge badge-{{ $item->priority }}">{{ $item->priority_label }}</span></td>
                         <td><span class="badge badge-done">Completed</span></td>
-                        <td>{{ $item->assignedSupport?->name ?? 'Unassigned' }}</td>
+                        <td>{{ $item->isInHouse() ? 'In house — '.$item->assignment_by_label : ($item->assignedSupport?->name ?? 'Unassigned') }}</td>
                         <td class="print-attachments-wrap">
+                            @if($item->isInHouse())
+                                <div class="print-attachment-section">
+                                    <strong>Inspection Request</strong><br>c/o {{ $item->in_house_inspection_by_label }}
+                                </div>
+                                <div class="print-attachment-section">
+                                    <strong>Work Order</strong><br>c/o {{ $item->in_house_work_order_by_label }}
+                                    <div class="description" style="white-space: pre-wrap">{{ $item->in_house_work_order }}</div>
+                                </div>
+                                <div class="print-attachment-section">
+                                    <strong>Completion Report</strong><br>c/o {{ $item->in_house_completion_by_label }}
+                                    <ul class="print-file-text-list">
+                                        @foreach($item->inHouseCompletionFiles as $file)
+                                            <li><a href="{{ route('attachments.show', $file) }}">{{ $file->original_name }}</a>@if($file->uploader_label)<br>c/o {{ $file->uploader_label }}@endif</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @else
                             @if($item->workOrderFiles->isNotEmpty())
                                 <div class="print-attachment-section">
                                     <div class="print-attachment-heading">Work Order ({{ $item->workOrderFiles->count() }}):</div>
@@ -382,6 +412,7 @@
                             @if($item->workOrderFiles->isEmpty() && $item->serviceReportFiles->isEmpty())
                                 <span class="print-none-text">No Dial-A attachments</span>
                             @endif
+                            @endif
                         </td>
                         <td>
                             {{ $item->submitter_name }}<br>
@@ -396,7 +427,7 @@
             </tbody>
         </table>
         <footer class="report-footer">
-            <span>Gateway Property Management System · PM Manager Report</span>
+            <span>Gateway Property Management System · {{ $generatedBy->role_label }} Report</span>
             <span>{{ number_format($requests->count()) }} completed {{ Str::plural('request', $requests->count()) }}</span>
         </footer>
     </main>
@@ -432,7 +463,7 @@
                         <span>&bull;</span>
                         <span><strong>Submitted By:</strong> {{ $attachment['request']->submitter_name }} ({{ $attachment['request']->designation }})</span>
                         <span>&bull;</span>
-                        <span><strong>Assigned Dial-A:</strong> {{ $attachment['request']->assignedSupport?->name ?? 'Unassigned' }}</span>
+                        <span><strong>Assigned to:</strong> {{ $attachment['request']->isInHouse() ? 'In house — '.$attachment['request']->in_house_completion_by_label : ($attachment['request']->assignedSupport?->name ?? 'Unassigned') }}</span>
                         <span>&bull;</span>
                         <span><strong>File Size:</strong> {{ number_format($attachment['file']->size / 1024, 1) }} KB</span>
                     </div>

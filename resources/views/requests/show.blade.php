@@ -47,8 +47,8 @@
                 <div class="request-information-row">
                     <span>Priority</span>
                     <strong>
-                        <span class="badge priority-{{ $propertyRequest->priority }}">{{ ucfirst($propertyRequest->priority) }}</span>
-                        @if($viewer->isManager())
+                        <span class="badge priority-{{ $propertyRequest->priority }}">{{ $propertyRequest->priority_label }}</span>
+                        @if($viewer->isManager() && !$propertyRequest->isAwaitingPmReview())
                             <button type="button" class="button button-light button-xs" data-open-priority-modal
                                     data-reference="{{ $propertyRequest->reference_no }}"
                                     data-priority="{{ $propertyRequest->priority }}"
@@ -91,6 +91,8 @@
         </div>
     </section>
 
+    @include('requests.partials.assignment-panel')
+
     <section class="panel workflow-card activity-overview-card">
         <div class="workflow-card-head"><span class="workflow-title-icon">◷</span><h2>Activity Progress</h2><span class="workflow-help-inline">Workbook workflow</span></div>
         <div class="activity-overview-body">
@@ -100,10 +102,16 @@
 
     
 
-    @if($viewer->isManager())
+    @if($propertyRequest->isAwaitingPmReview())
+        <section class="panel monitoring-note wide-note"><strong>PM Review Required</strong><p>Work begins after a PM user confirms the priority, remarks, and assignment.</p></section>
+    @elseif($propertyRequest->isInHouse())
+        @if($viewer->isManager() && $isFullyCompleted)
+            <div><a class="button button-primary" href="{{ route('reports.print', ['search' => $propertyRequest->reference_no]) }}" target="_blank" rel="noopener">Print / Publish Report (PDF)</a></div>
+        @endif
+    @elseif($viewer->isManager())
         <section class="panel monitoring-note wide-note">
-            <strong>PM Manager Workflow Controls</strong>
-            <p>PM Managers monitor request activities, can update request priority status, and exclusively publish and print completed request operations reports. Only Dial-A conducts inspections and uploads workflow documents.</p>
+            <strong>{{ $viewer->role_label }} Workflow Controls</strong>
+            <p>PM users can assign requests to Dial-A or In house, update priority, and publish completed request reports. This request currently uses the Dial-A workflow.</p>
         </section>
 
         @if($inspectionDone)
@@ -510,25 +518,11 @@
             </section>
         @endif
 
-        <section class="panel admin-delete-section">
-            <div class="workflow-card-head"><span class="workflow-title-icon" style="color:#d71938;">✕</span><h2>Delete Request</h2></div>
-            <div class="admin-delete-body">
-                <p>Permanently remove this request and all its attachments. <strong>This action cannot be undone.</strong></p>
-                <form method="POST"
-                      action="{{ route('requests.destroy', $propertyRequest) }}"
-                      data-admin-password-form
-                      data-action-title="Delete Request {{ $propertyRequest->reference_no }}"
-                      data-action-description="This will permanently remove the request, all uploaded files, and related audit entries. This action cannot be undone.">
-                    @csrf
-                    @method('DELETE')
-                    <input type="hidden" name="current_password" data-admin-password-field>
-                    <button class="button button-danger" type="submit">
-                        <span aria-hidden="true">✕</span> Delete This Request
-                    </button>
-                </form>
-            </div>
-        </section>
 
+    @endif
+
+    @if($viewer->isAdmin())
+        @include('requests.partials.delete-request')
         @include('requests.partials.admin-password-modal')
     @endif
 </div>

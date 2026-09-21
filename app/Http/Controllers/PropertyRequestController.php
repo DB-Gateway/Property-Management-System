@@ -9,6 +9,7 @@ use App\Models\RequestAttachment;
 use App\Models\User;
 use App\Services\RequestNotificationService;
 use App\Support\SimpleXlsxWriter;
+use App\Support\PmActionConfirmation;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -157,12 +158,16 @@ class PropertyRequestController extends Controller
         $dealers = Dealer::query()->orderBy('name')->get();
 
         $baseCounts = PropertyRequest::query();
+        if ($user->isDialA()) {
+            $baseCounts->where('assignment_type', '!=', 'pending_review');
+        }
         if ($user && $user->isDealer()) {
             $baseCounts->where('submitted_by', $user->id);
         }
 
         $agingCount = (clone $baseCounts)->overdue()->count();
         $counts = [
+            'pm_review' => (clone $baseCounts)->where('assignment_type', 'pending_review')->count(),
             'total' => (clone $baseCounts)->count(),
             'not_acknowledged' => (clone $baseCounts)->notAcknowledged()->count(),
             'inspection_pending' => (clone $baseCounts)->stageStatus('inspection', 'pending')->count(),
@@ -234,7 +239,7 @@ class PropertyRequestController extends Controller
             $item->display_dealer_name,
             $item->request_type,
             $item->assignedSupport?->name ?? 'Unassigned',
-            ucfirst($item->priority),
+            $item->priority_label,
             $item->status_label,
             $item->created_at->format('M d, Y h:i A'),
             $item->activity_progress[0]['label'] ?? '',
@@ -268,8 +273,10 @@ class PropertyRequestController extends Controller
         $query = PropertyRequest::query()
             ->with(['dealer', 'assignedSupport'])
             ->when($user->isDealer(), fn ($q) => $q->where('submitted_by', $user->id))
-            ->whereDate('request_date', '>=', $monthFrom->toDateString())
-            ->whereDate('request_date', '<=', $monthTo->toDateString());
+            ->when($user->isDialA(), fn ($q) => $q->where('assignment_type', '!=', 'pending_review'))
+            ->when(! (in_array('pm_review', [$request->stage, $request->status], true) && ! $request->filled('month') && ! $request->filled('period_month')),
+                fn ($q) => $q->whereDate('request_date', '>=', $monthFrom->toDateString())
+                    ->whereDate('request_date', '<=', $monthTo->toDateString()));
 
         $selectedBranch = $request->string('branch')->trim()->value();
         $selectedAreaRaw = $request->string('area')->trim()->value();
@@ -353,7 +360,9 @@ class PropertyRequestController extends Controller
             })
             ->when($request->filled('stage'), function ($q) use ($request) {
                 $stage = $request->stage;
-                if ($stage === 'not_acknowledged' || $stage === 'for_acknowledgement') {
+                if ($stage === 'pm_review') {
+                    $q->where('assignment_type', 'pending_review');
+                } elseif ($stage === 'not_acknowledged' || $stage === 'for_acknowledgement') {
                     $q->notAcknowledged();
                 } elseif ($request->filled('status') && $request->status !== 'all') {
                     $q->stageStatus($stage, $request->status);
@@ -363,7 +372,9 @@ class PropertyRequestController extends Controller
             })
             ->when(!$request->filled('stage') && $request->filled('status'), function ($q) use ($request) {
                 $status = $request->status;
-                if (in_array($status, ['overdue', 'aging'], true)) {
+                if ($status === 'pm_review') {
+                    $q->where('assignment_type', 'pending_review');
+                } elseif (in_array($status, ['overdue', 'aging'], true)) {
                     $q->overdue();
                 } elseif ($status === 'not_acknowledged' || $status === 'for_acknowledgement') {
                     $q->notAcknowledged();
@@ -444,7 +455,6 @@ class PropertyRequestController extends Controller
             'dealer_contact_person' => ['nullable', 'string', 'max:255'],
             'dealer_contact_number' => ['nullable', 'string', 'max:50'],
             'request_type' => ['required', Rule::in(self::TYPES)],
-            'priority' => ['required', Rule::in(['regular', 'urgent'])],
             'description' => ['required', 'string', 'min:10', 'max:5000'],
             'attachments' => ['nullable', 'array', 'max:5'],
             'attachments.*' => ['file', 'extensions:jpeg,png,jpg,webp,pdf,doc,docx,xls,xlsx,csv', 'max:10240'],
@@ -462,8 +472,6 @@ class PropertyRequestController extends Controller
             $nextSequence = $lastReference ? ((int) substr($lastReference, -4)) + 1 : 1;
             $reference = $prefix.str_pad((string) $nextSequence, 4, '0', STR_PAD_LEFT);
             $days = 4;
-
-            $designatedLead = User::whereIn('role', ['dial_a', 'pm_support'])->where('is_active', true)->first();
 
             $chosenDealer = !empty($validated['dealer_id'])
                 ? \App\Models\Dealer::find($validated['dealer_id'])
@@ -494,13 +502,14 @@ class PropertyRequestController extends Controller
                 'dealer_id' => $chosenDealer?->id ?? $user->dealer_id,
                 'dealer_name' => $dealerName,
                 'submitted_by' => $user->id,
-                'assigned_support_id' => $designatedLead?->id,
+                'assigned_support_id' => null,
+                'assignment_type' => 'pending_review',
                 'submitter_name' => $validated['name'],
                 'designation' => $validated['designation'],
                 'branch' => $branch,
                 'area' => $area,
                 'request_type' => $validated['request_type'],
-                'priority' => $validated['priority'],
+                'priority' => 'regular',
                 'description' => $validated['description'],
                 'request_date' => today(),
                 'due_date' => today()->addDays($days),
@@ -523,7 +532,7 @@ class PropertyRequestController extends Controller
 
         AuditLog::record('request_submitted', "{$propertyRequest->reference_no} was submitted by {$user->name} for {$propertyRequest->dealer_name} ({$propertyRequest->branch}).", $propertyRequest);
 
-        return redirect()->route('requests.show', $propertyRequest)->with('status', 'Request submitted successfully.');
+        return redirect()->route('requests.show', $propertyRequest)->with('status', 'Request submitted successfully. Awaiting PM review of priority, remarks, and assignment.');
     }
 
     public function show(Request $request, PropertyRequest $propertyRequest)
@@ -546,6 +555,7 @@ class PropertyRequestController extends Controller
             'inspectionFiles',
             'workOrderFiles',
             'serviceReportFiles',
+            'inHouseCompletionFiles',
         ]);
 
         return view('requests.show', compact('propertyRequest'));
@@ -566,86 +576,102 @@ class PropertyRequestController extends Controller
 
     public function updateSchedule(Request $request, PropertyRequest $propertyRequest)
     {
-        abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403);
-        abort_if($propertyRequest->status === 'completed' || $propertyRequest->completed_at, 422, 'Reopen the request before changing its schedule.');
-        $validated = $request->validate([
-            'inspection_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-            'work_order_start_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-            'service_report_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-        ]);
-        foreach (\App\Services\RequestNotificationService::STAGES as [$label, $schedule, $completed]) {
-            if ($propertyRequest->$completed && array_key_exists($schedule, $validated)
-                && $validated[$schedule] !== $propertyRequest->$schedule?->format('Y-m-d')) {
-                throw ValidationException::withMessages([$schedule => "Reopen {$label} before changing its date."]);
-            }
-        }
-        $before = $propertyRequest->only(array_keys($validated));
-        DB::transaction(function () use ($propertyRequest, $validated, $before) {
-            $propertyRequest->update($validated);
-            if ($propertyRequest->wasChanged(array_keys($validated))) {
-                AuditLog::record('request_schedule_changed', "{$propertyRequest->reference_no} schedule was updated.", $propertyRequest, [
-                    'before' => $before, 'after' => $validated,
-                ]);
-            }
-        });
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
-        return back()->with('status', 'Schedule saved. Any changes have been sent to the dealer and PM managers.');
+            abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403);
+            abort_if($propertyRequest->status === 'completed' || $propertyRequest->completed_at, 422, 'Reopen the request before changing its schedule.');
+            $validated = $request->validate([
+                'inspection_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+                'work_order_start_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+                'service_report_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            ]);
+            foreach (\App\Services\RequestNotificationService::STAGES as [$label, $schedule, $completed]) {
+                if ($propertyRequest->$completed && array_key_exists($schedule, $validated)
+                    && $validated[$schedule] !== $propertyRequest->$schedule?->format('Y-m-d')) {
+                    throw ValidationException::withMessages([$schedule => "Reopen {$label} before changing its date."]);
+                }
+            }
+            $before = $propertyRequest->only(array_keys($validated));
+            DB::transaction(function () use ($propertyRequest, $validated, $before) {
+                $propertyRequest->update($validated);
+                if ($propertyRequest->wasChanged(array_keys($validated))) {
+                    AuditLog::record('request_schedule_changed', "{$propertyRequest->reference_no} schedule was updated.", $propertyRequest, [
+                        'before' => $before, 'after' => $validated,
+                    ]);
+                }
+            });
+
+            return back()->with('status', 'Schedule saved. Any changes have been sent to the dealer and PM managers.');
+        });
     }
 
     public function assignToMe(Request $request, PropertyRequest $propertyRequest)
     {
-        abort_unless($request->user()->isSupport(), 403);
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
-        if ($propertyRequest->assigned_support_id && ! $propertyRequest->isAssignedTo($request->user())) {
-            throw ValidationException::withMessages([
-                'assignment' => 'This request is already assigned to another Dial-A user.',
+            abort_unless($request->user()->isSupport(), 403);
+
+            if ($propertyRequest->assigned_support_id && ! $propertyRequest->isAssignedTo($request->user())) {
+                throw ValidationException::withMessages([
+                    'assignment' => 'This request is already assigned to another Dial-A user.',
+                ]);
+            }
+
+            $propertyRequest->update([
+                'assigned_support_id' => $request->user()->id,
+                'status' => $propertyRequest->status === 'pending' ? 'on_going' : $propertyRequest->status,
             ]);
-        }
+            AuditLog::record('request_assigned', "{$propertyRequest->reference_no} was assigned to {$request->user()->name}.", $propertyRequest);
 
-        $propertyRequest->update([
-            'assigned_support_id' => $request->user()->id,
-            'status' => $propertyRequest->status === 'pending' ? 'on_going' : $propertyRequest->status,
-        ]);
-        AuditLog::record('request_assigned', "{$propertyRequest->reference_no} was assigned to {$request->user()->name}.", $propertyRequest);
-
-        return back()->with('status', 'Request assigned to you.');
+            return back()->with('status', 'Request assigned to you.');
+        });
     }
 
     public function updateStatus(Request $request, PropertyRequest $propertyRequest)
     {
-        abort_unless($request->user()->isSupport(), 403);
-        $this->ensureAssignedSupport($request, $propertyRequest);
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
-        $validated = $request->validate([
-            'status' => ['required', Rule::in(['pending', 'on_going', 'in_progress', 'awaiting_dealer'])],
-            'status_note' => ['nullable', 'string', 'max:1000'],
-        ]);
+            abort_unless($request->user()->isSupport(), 403);
+            $this->ensureAssignedSupport($request, $propertyRequest);
 
-        $oldStatus = $propertyRequest->status;
-        $propertyRequest->update([
-            'status' => $validated['status'],
-            'assigned_support_id' => $propertyRequest->assigned_support_id ?: $request->user()->id,
-            'completed_at' => null,
-        ]);
+            $validated = $request->validate([
+                'status' => ['required', Rule::in(['pending', 'on_going', 'in_progress', 'awaiting_dealer'])],
+                'status_note' => ['nullable', 'string', 'max:1000'],
+            ]);
 
-        AuditLog::record(
-            'request_status_updated',
-            "{$propertyRequest->reference_no} changed from ".str_replace('_', ' ', $oldStatus).' to '.str_replace('_', ' ', $validated['status']).'.',
-            $propertyRequest,
-            ['note' => $validated['status_note'] ?? null]
-        );
+            $oldStatus = $propertyRequest->status;
+            $propertyRequest->update([
+                'status' => $validated['status'],
+                'assigned_support_id' => $propertyRequest->assigned_support_id ?: $request->user()->id,
+                'completed_at' => null,
+            ]);
 
-        return back()->with('status', 'Request status updated.');
+            AuditLog::record(
+                'request_status_updated',
+                "{$propertyRequest->reference_no} changed from ".str_replace('_', ' ', $oldStatus).' to '.str_replace('_', ' ', $validated['status']).'.',
+                $propertyRequest,
+                ['note' => $validated['status_note'] ?? null]
+            );
+
+            return back()->with('status', 'Request status updated.');
+        });
     }
 
     public function updatePriority(Request $request, PropertyRequest $propertyRequest)
     {
         abort_unless($request->user()->isManager() || $request->user()->isAdmin(), 403, 'Only PM Managers can edit priority status.');
+        abort_if($propertyRequest->isAwaitingPmReview(), 422, 'Complete the PM review with priority, remarks, and assignment first.');
+        PmActionConfirmation::validate($request);
 
         $validated = $request->validate([
             'priority' => ['required', Rule::in(['regular', 'urgent'])],
-            'remarks' => ['nullable', 'string', 'max:1000'],
-            'current_password' => ['required', 'current_password'],
+            'remarks' => ['required', 'string', 'max:1000'],
         ], [
             'priority.required' => 'Please select a priority status.',
             'priority.in' => 'Selected priority is invalid.',
@@ -713,6 +739,7 @@ class PropertyRequestController extends Controller
     {
         return DB::transaction(function () use ($request, $propertyRequest) {
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403, 'Only Dial-A is authorized to conduct and complete inspections.');
 
@@ -795,6 +822,7 @@ class PropertyRequestController extends Controller
         return DB::transaction(function () use ($request, $propertyRequest) {
             // Reload inside the lock: two submissions may have bound the same unfinished request.
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403, 'Only Dial-A is authorized to conduct and complete inspections.');
 
@@ -986,6 +1014,7 @@ class PropertyRequestController extends Controller
     {
         return DB::transaction(function () use ($request, $propertyRequest) {
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403, 'Only Dial-A is authorized to update Work Order details.');
 
@@ -1070,6 +1099,7 @@ class PropertyRequestController extends Controller
         return DB::transaction(function () use ($request, $propertyRequest) {
             // Reload inside the lock: two submissions may have bound the same unfinished request.
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403, 'Only Dial-A is authorized to upload Work Order attachments.');
 
@@ -1188,6 +1218,7 @@ class PropertyRequestController extends Controller
     {
         return DB::transaction(function () use ($request, $propertyRequest) {
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA(), 403, 'Only Dial-A is authorized to upload Service Report attachments.');
 
@@ -1231,6 +1262,7 @@ class PropertyRequestController extends Controller
     {
         return DB::transaction(function () use ($request, $propertyRequest) {
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA(), 403, 'Only Dial-A is strictly authorized to upload Service Report attachments.');
 
@@ -1274,6 +1306,7 @@ class PropertyRequestController extends Controller
         return DB::transaction(function () use ($request, $propertyRequest) {
             // Reload inside the lock: two submissions may have bound the same unfinished request.
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA(), 403, 'Only Dial-A is strictly authorized to upload Service Report attachments.');
 
@@ -1326,31 +1359,36 @@ class PropertyRequestController extends Controller
 
     public function notifyDialLead(Request $request, PropertyRequest $propertyRequest)
     {
-        abort_unless($request->user()->isDialA(), 403, 'Only Dial-A can notify.');
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
-        if (! $propertyRequest->service_report_completed_at) {
-            throw ValidationException::withMessages([
-                'notification' => 'The Service Report must be completed before notification.',
+            abort_unless($request->user()->isDialA(), 403, 'Only Dial-A can notify.');
+
+            if (! $propertyRequest->service_report_completed_at) {
+                throw ValidationException::withMessages([
+                    'notification' => 'The Service Report must be completed before notification.',
+                ]);
+            }
+
+            if ($propertyRequest->status === 'completed' || $propertyRequest->completed_at) {
+                throw ValidationException::withMessages([
+                    'notification' => 'This request has already been completed.',
+                ]);
+            }
+
+            $propertyRequest->update([
+                'completion_notified_at' => now(),
             ]);
-        }
 
-        if ($propertyRequest->status === 'completed' || $propertyRequest->completed_at) {
-            throw ValidationException::withMessages([
-                'notification' => 'This request has already been completed.',
-            ]);
-        }
+            AuditLog::record(
+                'dial_lead_notified',
+                "{$propertyRequest->reference_no}: Dial-A {$request->user()->name} confirmed ready for completion.",
+                $propertyRequest
+            );
 
-        $propertyRequest->update([
-            'completion_notified_at' => now(),
-        ]);
-
-        AuditLog::record(
-            'dial_lead_notified',
-            "{$propertyRequest->reference_no}: Dial-A {$request->user()->name} confirmed ready for completion.",
-            $propertyRequest
-        );
-
-        return back()->with('status', "Notification recorded. Request is ready to be finished.");
+            return back()->with('status', "Notification recorded. Request is ready to be finished.");
+        });
     }
 
     public function finishRequest(Request $request, PropertyRequest $propertyRequest)
@@ -1358,6 +1396,7 @@ class PropertyRequestController extends Controller
         return DB::transaction(function () use ($request, $propertyRequest) {
             // Reload inside the lock: two submissions may have bound the same unfinished request.
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
             abort_unless($request->user()->isDialA() && $propertyRequest->isAssignedTo($request->user()), 403, 'Only Dial-A is authorized to finish and complete a request.');
 
@@ -1389,104 +1428,109 @@ class PropertyRequestController extends Controller
 
     public function undoWorkflowStage(Request $request, PropertyRequest $propertyRequest, string $stage)
     {
-        abort_unless(
-            $request->user()->isAdmin(),
-            403,
-            'Only an administrator is authorized to undo workflow steps.'
-        );
+        return DB::transaction(function () use ($request, $propertyRequest, $stage) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            $this->ensureDialAWorkflow($propertyRequest);
 
-        $request->validate([
-            'current_password' => ['required', 'current_password'],
-        ], [
-            'current_password.required' => 'Your administrator password is required to undo a workflow step.',
-            'current_password.current_password' => 'The password you entered is incorrect.',
-        ]);
+            abort_unless(
+                $request->user()->isAdmin(),
+                403,
+                'Only an administrator is authorized to undo workflow steps.'
+            );
 
-        $stages = [
-            'inspection' => [
-                'label' => 'Inspection',
-                'completed' => (bool) $propertyRequest->inspection_completed_at || $propertyRequest->status === 'completed',
-                'updates' => [
-                    'inspection_completed_at' => null,
-                    'work_order_completed_at' => null,
-                    'service_report_completed_at' => null,
-                    'completion_notified_at' => null,
-                    'completed_at' => null,
-                    'status' => 'pending',
-                ],
-                'reopened' => ['Inspection', 'Work Order', 'Service Report', 'Request Completion'],
-            ],
-            'work-order' => [
-                'label' => 'Work Order',
-                'completed' => (bool) $propertyRequest->work_order_completed_at || $propertyRequest->status === 'completed',
-                'updates' => [
-                    'work_order_completed_at' => null,
-                    'service_report_completed_at' => null,
-                    'completion_notified_at' => null,
-                    'completed_at' => null,
-                    'status' => 'on_going',
-                ],
-                'reopened' => ['Work Order', 'Service Report', 'Request Completion'],
-            ],
-            'service-report' => [
-                'label' => 'Service Report',
-                'completed' => (bool) $propertyRequest->service_report_completed_at || $propertyRequest->status === 'completed',
-                'updates' => [
-                    'service_report_completed_at' => null,
-                    'completion_notified_at' => null,
-                    'completed_at' => null,
-                    'status' => 'on_going',
-                ],
-                'reopened' => ['Service Report', 'Request Completion'],
-            ],
-            'completion' => [
-                'label' => 'Request Completion',
-                'completed' => (bool) $propertyRequest->completed_at || $propertyRequest->status === 'completed',
-                'updates' => [
-                    'completed_at' => null,
-                    'status' => 'on_going',
-                ],
-                'reopened' => ['Request Completion'],
-            ],
-        ];
-
-        abort_unless(isset($stages[$stage]), 404);
-        $selectedStage = $stages[$stage];
-
-        if (! $selectedStage['completed']) {
-            throw ValidationException::withMessages([
-                'workflow' => "The {$selectedStage['label']} step is not completed and cannot be undone.",
+            $request->validate([
+                'current_password' => ['required', 'current_password'],
+            ], [
+                'current_password.required' => 'Your administrator password is required to undo a workflow step.',
+                'current_password.current_password' => 'The password you entered is incorrect.',
             ]);
-        }
 
-        $previousState = [
-            'status' => $propertyRequest->status,
-            'inspection_completed_at' => $propertyRequest->inspection_completed_at?->toIso8601String(),
-            'work_order_completed_at' => $propertyRequest->work_order_completed_at?->toIso8601String(),
-            'service_report_completed_at' => $propertyRequest->service_report_completed_at?->toIso8601String(),
-            'completed_at' => $propertyRequest->completed_at?->toIso8601String(),
-        ];
+            $stages = [
+                'inspection' => [
+                    'label' => 'Inspection',
+                    'completed' => (bool) $propertyRequest->inspection_completed_at || $propertyRequest->status === 'completed',
+                    'updates' => [
+                        'inspection_completed_at' => null,
+                        'work_order_completed_at' => null,
+                        'service_report_completed_at' => null,
+                        'completion_notified_at' => null,
+                        'completed_at' => null,
+                        'status' => 'pending',
+                    ],
+                    'reopened' => ['Inspection', 'Work Order', 'Service Report', 'Request Completion'],
+                ],
+                'work-order' => [
+                    'label' => 'Work Order',
+                    'completed' => (bool) $propertyRequest->work_order_completed_at || $propertyRequest->status === 'completed',
+                    'updates' => [
+                        'work_order_completed_at' => null,
+                        'service_report_completed_at' => null,
+                        'completion_notified_at' => null,
+                        'completed_at' => null,
+                        'status' => 'on_going',
+                    ],
+                    'reopened' => ['Work Order', 'Service Report', 'Request Completion'],
+                ],
+                'service-report' => [
+                    'label' => 'Service Report',
+                    'completed' => (bool) $propertyRequest->service_report_completed_at || $propertyRequest->status === 'completed',
+                    'updates' => [
+                        'service_report_completed_at' => null,
+                        'completion_notified_at' => null,
+                        'completed_at' => null,
+                        'status' => 'on_going',
+                    ],
+                    'reopened' => ['Service Report', 'Request Completion'],
+                ],
+                'completion' => [
+                    'label' => 'Request Completion',
+                    'completed' => (bool) $propertyRequest->completed_at || $propertyRequest->status === 'completed',
+                    'updates' => [
+                        'completed_at' => null,
+                        'status' => 'on_going',
+                    ],
+                    'reopened' => ['Request Completion'],
+                ],
+            ];
 
-        DB::transaction(function () use ($request, $propertyRequest, $selectedStage, $stage, $previousState) {
-            $propertyRequest->update($selectedStage['updates']);
+            abort_unless(isset($stages[$stage]), 404);
+            $selectedStage = $stages[$stage];
 
-            AuditLog::record(
-                'workflow_step_undone',
-                "{$propertyRequest->reference_no} {$selectedStage['label']} was undone by administrator {$request->user()->name}.",
-                $propertyRequest,
-                [
-                    'stage' => $stage,
-                    'reopened_stages' => $selectedStage['reopened'],
-                    'uploaded_files_retained' => true,
-                    'previous_state' => $previousState,
-                ]
+            if (! $selectedStage['completed']) {
+                throw ValidationException::withMessages([
+                    'workflow' => "The {$selectedStage['label']} step is not completed and cannot be undone.",
+                ]);
+            }
+
+            $previousState = [
+                'status' => $propertyRequest->status,
+                'inspection_completed_at' => $propertyRequest->inspection_completed_at?->toIso8601String(),
+                'work_order_completed_at' => $propertyRequest->work_order_completed_at?->toIso8601String(),
+                'service_report_completed_at' => $propertyRequest->service_report_completed_at?->toIso8601String(),
+                'completed_at' => $propertyRequest->completed_at?->toIso8601String(),
+            ];
+
+            DB::transaction(function () use ($request, $propertyRequest, $selectedStage, $stage, $previousState) {
+                $propertyRequest->update($selectedStage['updates']);
+
+                AuditLog::record(
+                    'workflow_step_undone',
+                    "{$propertyRequest->reference_no} {$selectedStage['label']} was undone by administrator {$request->user()->name}.",
+                    $propertyRequest,
+                    [
+                        'stage' => $stage,
+                        'reopened_stages' => $selectedStage['reopened'],
+                        'uploaded_files_retained' => true,
+                        'previous_state' => $previousState,
+                    ]
+                );
+            });
+
+            return back()->with(
+                'status',
+                "{$selectedStage['label']} was undone. Uploaded files and entered details were kept."
             );
         });
-
-        return back()->with(
-            'status',
-            "{$selectedStage['label']} was undone. Uploaded files and entered details were kept."
-        );
     }
 
     public function attachment(Request $request, RequestAttachment $attachment)
@@ -1560,17 +1604,21 @@ class PropertyRequestController extends Controller
 
     private function ensureCanView(Request $request, PropertyRequest $propertyRequest): void
     {
+        abort_if($request->user()->isDialA() && $propertyRequest->isAwaitingPmReview(), 403, 'This request is awaiting PM review.');
         if ($request->user()->isDealer() && $propertyRequest->submitted_by !== $request->user()->id) {
             abort(403);
         }
     }
 
+    private function ensureDialAWorkflow(PropertyRequest $propertyRequest): void
+    {
+        abort_unless($propertyRequest->assignment_type === 'dial_a', 403, 'The PM team must review and assign this request to Dial-A before work can begin.');
+    }
+
     private function ensureAssignedSupport(Request $request, PropertyRequest $propertyRequest): void
     {
-        if ($request->user()->isDialA()) {
-            return;
-        }
-        abort_unless($propertyRequest->isAssignedTo($request->user()), 403);
+        $this->ensureDialAWorkflow($propertyRequest);
+        abort_unless($propertyRequest->isAssignedTo($request->user()), 403, 'Only the assigned Dial-A user may update this workflow.');
     }
 
     /** @param array<int, UploadedFile> $files */

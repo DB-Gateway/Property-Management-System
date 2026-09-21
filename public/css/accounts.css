@@ -13,6 +13,18 @@
 .dealer-information-grid dt { margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .dealer-information-grid dd { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
 .dealer-information-wide { grid-column: 1 / -1; }
+.password-access-panel { margin-top: 20px; }
+.password-access-panel .section-help { margin: 4px 0 18px; color: var(--muted); line-height: 1.6; }
+.password-access-alert { margin-bottom: 16px; }
+.password-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.password-option-card { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.password-option-card h3 { margin: 4px 0 8px; font: 700 16px/1.35 Montserrat, Inter, sans-serif; }
+.password-option-card p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.password-option-card form { display: grid; gap: 14px; }
+.password-option-card .form-field { margin: 0; }
+.password-option-card .button { justify-self: start; }
+.password-change-check { display: flex; align-items: flex-start; gap: 9px; color: var(--ink); font-size: 12px; line-height: 1.5; cursor: pointer; }
+.password-change-check input { margin-top: 2px; }
 .account-dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 28px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: #fff; box-shadow: 0 24px 80px rgba(4,21,35,.25); }
 .account-dialog::backdrop { background: rgba(4,21,35,.65); backdrop-filter: blur(4px); }
 .account-dialog h1, .account-dialog h2 { margin: 10px 0 12px; font: 800 24px/1.25 Montserrat, Inter, sans-serif; }
@@ -29,4 +41,5 @@
     .dealer-information-heading { align-items: stretch; flex-direction: column; }
     .dealer-information-grid { grid-template-columns: 1fr; }
     .dealer-information-wide { grid-column: auto; }
+    .password-option-grid { grid-template-columns: 1fr; }
 }

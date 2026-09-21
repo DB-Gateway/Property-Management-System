@@ -54,7 +54,7 @@
                     <span class="nav-icon">▣</span><span>{{ auth()->user()->isAdmin() ? 'Request' : 'Requests' }}</span>
                     @if(auth()->user()->isDialA())
                         @php
-                            $pendingFinishCount = \App\Models\PropertyRequest::whereNotNull('service_report_completed_at')->whereNull('completed_at')->count();
+                            $pendingFinishCount = \App\Models\PropertyRequest::where('assignment_type', 'dial_a')->whereNotNull('service_report_completed_at')->whereNull('completed_at')->count();
                         @endphp
                         @if($pendingFinishCount > 0)
                             <span class="badge" style="background:#dc2626; color:#fff; font-size:11px; padding:2px 7px; border-radius:10px; margin-left:auto;" title="{{ $pendingFinishCount }} requests awaiting confirmation">{{ $pendingFinishCount }}</span>
@@ -169,6 +169,9 @@
 
     <div class="sidebar-overlay" data-sidebar-toggle></div>
     <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}" defer></script>
+    @if(auth()->user()->isManager())
+        @include('requests.partials.pm-confirmation-modal')
+    @endif
     @if(!auth()->user()->isAdmin() && !auth()->user()->must_change_password)
         @php
             $pushConfig = [

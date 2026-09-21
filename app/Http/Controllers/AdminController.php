@@ -43,7 +43,7 @@ class AdminController extends Controller
                 $search = $request->string('search')->trim();
                 $query->where(fn ($nested) => $nested->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
             })
-            ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'pm_manager' THEN 2 WHEN 'dial_a' THEN 3 WHEN 'pm_support' THEN 3 WHEN 'dial_lead' THEN 3 ELSE 4 END")
+            ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'pm_manager' THEN 2 WHEN 'pm_admin' THEN 2 WHEN 'dial_a' THEN 3 WHEN 'pm_support' THEN 3 WHEN 'dial_lead' THEN 3 ELSE 4 END")
             ->orderBy('name')
             ->paginate(20)
             ->withQueryString();

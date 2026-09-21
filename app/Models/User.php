@@ -19,6 +19,7 @@ class User extends Authenticatable
     public const ROLES = [
         'admin' => 'Administrator',
         'pm_manager' => 'PM Manager',
+        'pm_admin' => 'PM Admin',
         'dial_a' => 'Dial-A',
         'dealer' => 'Dealer',
     ];
@@ -111,7 +112,7 @@ class User extends Authenticatable
 
     public function isManager(): bool
     {
-        return $this->role === 'pm_manager';
+        return in_array($this->role, ['pm_manager', 'pm_admin'], true);
     }
 
     public function isDealer(): bool
@@ -129,6 +130,7 @@ class User extends Authenticatable
         return match ($this->role) {
             'admin' => 'Administrator',
             'pm_manager' => 'PM Manager',
+            'pm_admin' => 'PM Admin',
             'dial_a', 'pm_support', 'dial_lead' => 'Dial-A',
             default => 'Dealer',
         };

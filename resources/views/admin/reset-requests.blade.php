@@ -40,7 +40,7 @@
                 <ul>
                     <li>All {{ number_format($counts['dealers']) }} dealer-directory records and contact details</li>
                     <li>All {{ number_format($counts['users']) }} user accounts and role assignments</li>
-                    <li>Administrator, PM Manager, PM Support, and Dealer profiles</li>
+                    <li>Administrator, PM Manager, PM Admin, Dial-A, and Dealer profiles</li>
                     <li>Non-request audit entries and system configuration</li>
                 </ul>
             </div>

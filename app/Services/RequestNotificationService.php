@@ -23,7 +23,8 @@ class RequestNotificationService
 
     public function created(PropertyRequest $request): void
     {
-        $this->send($request, $this->dialAUsers(), 'new_request', 'New request',
+        $recipients = $request->assignment_type !== 'dial_a' ? $this->pmUsers() : $this->dialAUsers();
+        $this->send($request, $recipients, 'new_request', $request->isAwaitingPmReview() ? 'PM review required' : 'New request',
             "{$request->reference_no}: {$request->request_type} requested by {$request->submitter_name} ({$request->branch}).",
             'created');
     }
@@ -32,6 +33,26 @@ class RequestNotificationService
     {
         $recipients = $this->stakeholders($request);
         $event = (string) Str::uuid();
+
+        if ($request->wasChanged('assignment_type')) {
+            $inHouse = $request->assignment_type === 'in_house';
+            $label = $inHouse ? 'In house' : 'Dial-A';
+            $assignmentRecipients = $inHouse ? $recipients : $recipients->merge($this->dialAUsers())->unique('id');
+            $this->send($request, $assignmentRecipients, 'assignment_changed', $request->getOriginal('assignment_type') === 'pending_review' ? 'PM review completed' : 'Request reassigned',
+                "{$request->reference_no}: Assigned to {$label}".$this->careOf($request, 'assignment').'. Priority: '.ucfirst($request->priority).'.'.($request->priority_remarks ? ' Remarks: '.$request->priority_remarks : ''),
+                "{$event}:assignment", ['assignment_type' => $request->assignment_type]);
+            $this->retireReminders($request);
+
+            // Switching routes may restore an earlier Dial-A completion; it is not a new completion.
+            return;
+        }
+
+        if ($request->assignment_type === 'in_house') {
+            $this->inHouseUpdated($request, $recipients, $event);
+
+            return;
+        }
+
         $changes = [];
         $completedStages = [];
         $requestCompleted = $request->wasChanged('completed_at') && $request->completed_at && ! $request->getOriginal('completed_at');
@@ -75,9 +96,57 @@ class RequestNotificationService
             array_push($reminderFields, $schedule, $completed);
         }
         if ($request->wasChanged($reminderFields) || ($request->wasChanged('status') && $request->status === 'completed')) {
-            DatabaseNotification::where('property_request_id', $request->id)->whereNull('read_at')
-                ->whereIn('data->kind', ['upcoming', 'ageing'])->update(['read_at' => now()]);
+            $this->retireReminders($request);
         }
+    }
+
+    private function inHouseUpdated(PropertyRequest $request, Collection $recipients, string $event): void
+    {
+        $stages = [
+            'in_house_requested_at' => ['inspection', 'Inspection requested', 'in_house_inspection'],
+            'in_house_work_order_at' => ['work_order', 'Work Order recorded', 'in_house_work_order'],
+            'in_house_completed_at' => ['completion_report', 'Completion Report submitted', 'in_house_completion'],
+        ];
+
+        foreach ($stages as $field => [$stage, $label, $actorPrefix]) {
+            if (! $request->wasChanged($field) || ! $request->$field) {
+                continue;
+            }
+
+            $completed = $stage === 'completion_report' && (bool) $request->completed_at;
+            $message = "{$request->reference_no}: In house {$label}".$this->careOf($request, $actorPrefix).'.';
+            if ($completed) {
+                $message .= ' The request is now completed.';
+            }
+            $this->send($request, $recipients, 'in_house_updated', $label, $message, "{$event}:{$stage}", [
+                'stage' => $stage,
+                'assignment_type' => 'in_house',
+                'request_completed' => $completed,
+            ]);
+        }
+
+        if ($request->wasChanged([...array_keys($stages), 'completed_at', 'status'])) {
+            $this->retireReminders($request);
+        }
+    }
+
+    private function careOf(PropertyRequest $request, string $prefix): string
+    {
+        $role = $request->getAttribute($prefix.'_by_role');
+        $name = $request->getAttribute($prefix.'_by_name');
+        if (! $role && ! $name) {
+            return '';
+        }
+
+        $label = User::ROLES[$role] ?? 'PM user';
+
+        return ' c/o '.$label.($name ? ' ('.$name.')' : '');
+    }
+
+    private function retireReminders(PropertyRequest $request): void
+    {
+        DatabaseNotification::where('property_request_id', $request->id)->whereNull('read_at')
+            ->whereIn('data->kind', ['upcoming', 'ageing'])->update(['read_at' => now()]);
     }
 
     public function priorityChanged(PropertyRequest $request, string $oldPriority, string $newPriority, ?string $remarks = null): void
@@ -121,17 +190,30 @@ class RequestNotificationService
     public function reminders(): void
     {
         $recipients = $this->dialAUsers();
-        if ($recipients->isEmpty()) {
+        $pmRecipients = $this->pmUsers();
+        if ($recipients->isEmpty() && $pmRecipients->isEmpty()) {
             return;
         }
 
         PropertyRequest::where('status', '!=', 'completed')->whereNull('completed_at')
-            ->chunkById(100, function ($requests) use ($recipients) {
+            ->chunkById(100, function ($requests) use ($recipients, $pmRecipients) {
                 foreach ($requests as $request) {
-                    DB::transaction(function () use ($request, $recipients) {
+                    DB::transaction(function () use ($request, $recipients, $pmRecipients) {
                         // Serialize against schedule/completion updates so stale reminders cannot outlive them.
                         $request = PropertyRequest::whereKey($request->id)->lockForUpdate()->first();
                         if (! $request || $request->status === 'completed' || $request->completed_at) {
+                            return;
+                        }
+                        if ($request->isAwaitingPmReview()) {
+                            if ($request->is_overdue) {
+                                $this->sendReminder($request, $pmRecipients, 'pm_review', 'ageing', 'PM review pending',
+                                    "{$request->reference_no}: Review the priority, remarks, and assignment before work begins.");
+                            }
+                            return;
+                        }
+                        if ($request->assignment_type === 'in_house') {
+                            $this->inHouseReminder($request, $pmRecipients);
+
                             return;
                         }
                         foreach (self::STAGES as $stage => [$label, $schedule, $completed]) {
@@ -174,6 +256,7 @@ class RequestNotificationService
         $state = md5(json_encode($request->only([
             'inspection_date', 'work_order_start_date', 'service_report_date',
             'inspection_completed_at', 'work_order_completed_at', 'service_report_completed_at',
+            'assignment_type', 'assigned_at', 'in_house_requested_at', 'in_house_work_order_at', 'in_house_completed_at',
         ])));
         $this->send($request, $users, $kind, $title, $message, "{$kind}:{$stage}:".today()->toDateString().":{$state}");
     }
@@ -183,11 +266,31 @@ class RequestNotificationService
         return User::where('is_active', true)->whereIn('role', ['dial_a', 'pm_support', 'dial_lead'])->get();
     }
 
+    private function pmUsers(): Collection
+    {
+        return User::where('is_active', true)->whereIn('role', ['pm_manager', 'pm_admin'])->get();
+    }
+
+    private function inHouseReminder(PropertyRequest $request, Collection $recipients): void
+    {
+        if (! $request->is_overdue) {
+            return;
+        }
+
+        [$stage, $label] = match (true) {
+            ! $request->in_house_requested_at => ['inspection', 'Inspection Request'],
+            ! $request->in_house_work_order_at => ['work_order', 'Work Order'],
+            default => ['completion_report', 'Completion Report'],
+        };
+        $this->sendReminder($request, $recipients, $stage, 'ageing', "In house {$label} past due",
+            "{$request->reference_no}: In house {$label} is unfinished. This request is more than 4 calendar days old (submitted {$request->request_date->format('M d, Y')}).");
+    }
+
     private function stakeholders(PropertyRequest $request): Collection
     {
         // Dealer access is scoped to submitted_by throughout PMS, including notification destinations.
         return User::where('is_active', true)->where(function (Builder $query) use ($request) {
-            $query->where('role', 'pm_manager')->orWhere(fn (Builder $dealer) => $dealer->where('role', 'dealer')->whereKey($request->submitted_by));
+            $query->whereIn('role', ['pm_manager', 'pm_admin'])->orWhere(fn (Builder $dealer) => $dealer->where('role', 'dealer')->whereKey($request->submitted_by));
         })->get();
     }
 

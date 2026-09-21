@@ -120,6 +120,7 @@ class ManagerEditPriorityTest extends TestCase
     {
         $response = $this->actingAs($this->manager)->patchJson(route('requests.priority', $this->request), [
             'priority' => 'urgent',
+            'remarks' => 'Electrical safety issue requires immediate attention.',
             'current_password' => 'ManagerPass2026!',
         ]);
 

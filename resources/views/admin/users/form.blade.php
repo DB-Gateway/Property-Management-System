@@ -88,6 +88,65 @@
         <button class="button button-primary" type="submit">{{ $user->exists ? 'Save Changes' : 'Create User' }}</button>
     </div>
 </form>
+
+@if($user->exists)
+    <section class="panel form-panel password-access-panel">
+        <div class="form-section no-border">
+            <h2>Password Access</h2>
+            @if($user->is(auth()->user()))
+                <p class="section-help">For security, change your own password from <a href="{{ route('profile.edit') }}">My Profile</a>.</p>
+            @else
+                <p class="section-help">Use email authentication when the user can access their mailbox. If the mailbox is unavailable, set a password manually after confirming your administrator password.</p>
+                @error('password_email')<div class="alert alert-error password-access-alert">{{ $message }}</div>@enderror
+                @error('user')<div class="alert alert-error password-access-alert">{{ $message }}</div>@enderror
+
+                <div class="password-option-grid">
+                    <article class="password-option-card">
+                        <div>
+                            <p class="eyebrow">ACTIVE EMAIL</p>
+                            <h3>Send a secure reset link</h3>
+                            <p>The user authenticates through a time-limited link sent to <strong>{{ $user->email }}</strong> and chooses their own password.</p>
+                        </div>
+                        <form method="POST" action="{{ route('admin.users.password.email', $user) }}">
+                            @csrf
+                            <button class="button button-primary" type="submit">Send Password Reset Email</button>
+                        </form>
+                    </article>
+
+                    <article class="password-option-card">
+                        <div>
+                            <p class="eyebrow">EMAIL UNAVAILABLE</p>
+                            <h3>Set password manually</h3>
+                            <p>Confirm your administrator identity before replacing this user’s password.</p>
+                        </div>
+                        <form method="POST" action="{{ route('admin.users.password.update', $user) }}">
+                            @csrf
+                            @method('PATCH')
+                            <div class="form-field">
+                                <label for="password">New Password <em>*</em></label>
+                                <input id="password" name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="password_confirmation">Confirm New Password <em>*</em></label>
+                                <input id="password_confirmation" name="password_confirmation" type="password" minlength="8" maxlength="72" autocomplete="new-password" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="admin_password">Your Administrator Password <em>*</em></label>
+                                <input id="admin_password" name="admin_password" type="password" autocomplete="current-password" required>
+                                <small>This confirms that you authorize the password change.</small>
+                            </div>
+                            <label class="password-change-check">
+                                <input type="checkbox" name="require_password_change" value="1" @checked(old('require_password_change', true))>
+                                <span>Require the user to choose a new password at next sign-in</span>
+                            </label>
+                            <button class="button button-primary" type="submit">Update User Password</button>
+                        </form>
+                    </article>
+                </div>
+            @endif
+        </div>
+    </section>
+@endif
 @endsection
 
 @push('scripts')

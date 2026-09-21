@@ -44,7 +44,7 @@
                 </svg>
             </span>
             <label class="filter-label" for="request-filter-month">Search Month -</label>
-            <input type="month" name="month" id="request-filter-month" value="{{ $selectedMonth }}" title="Search Month -" aria-label="Search Month -">
+            <input type="month" name="month" id="request-filter-month" value="{{ in_array('pm_review', [request('stage'), request('status')], true) && !request()->filled('month') ? '' : $selectedMonth }}" title="Search Month -" aria-label="Search Month -">
         </div>
 
         @unless(auth()->user()->isDealer())
@@ -98,6 +98,7 @@
             <label class="filter-label" for="request-filter-stage">Search</label>
             <select name="stage" id="request-filter-stage" title="Search Activities" aria-label="Search Activities">
                 <option value="">All Activity</option>
+                @unless(auth()->user()->isDialA())<option value="pm_review" @selected(request('stage') === 'pm_review' || request('status') === 'pm_review')>Awaiting PM Review (all months)</option>@endunless
                 <option value="not_acknowledged" @selected(in_array(request('stage'), ['not_acknowledged', 'for_acknowledgement'], true) || in_array(request('status'), ['not_acknowledged', 'for_acknowledgement'], true))>For Acknowledgement</option>
                 <option value="inspection" @selected(request('stage') === 'inspection' || request('status') === 'inspection')>Inspection</option>
                 <option value="work_order" @selected(request('stage') === 'work_order' || request('status') === 'work_order')>Work Order</option>
@@ -173,7 +174,7 @@
                         <td><a class="reference" href="{{ route('requests.show', $item) }}">{{ $item->reference_no }}</a></td>
                         <td title="{{ $item->dealer?->name }}"><strong>{{ $item->display_branch }}</strong><small>{{ $item->display_dealer_name }} · {{ $item->area ?? $item->dealer?->area }}</small></td>
                         <td><span class="badge category-badge">{{ $item->request_type }}</span></td>
-                        <td><span class="badge priority-{{ $item->priority }}">{{ ucfirst($item->priority) }}</span></td>
+                        <td><span class="badge priority-{{ $item->priority }}">{{ $item->priority_label }}</span></td>
                         <td>
                             <div class="submitted-date-block">
                                 <span class="date-val">{{ $item->created_at->format('M d, Y') }}</span>
@@ -194,6 +195,9 @@
                         <td class="activity-progress-cell">@include('requests.partials.activity-progress', ['requestItem' => $item, 'compact' => true])</td>
                         @if(auth()->user()->isManager())
                             <td>
+                                @if($item->isAwaitingPmReview())
+                                    <a class="table-action" href="{{ route('requests.show', $item) }}#request-assignment">Review &amp; Assign</a>
+                                @else
                                 <button type="button" class="table-action button-link" data-open-priority-modal
                                         data-reference="{{ $item->reference_no }}"
                                         data-priority="{{ $item->priority }}"
@@ -203,6 +207,7 @@
                                         style="background:none; border:none; padding:0; cursor:pointer; font-size:12px;">
                                     Edit Priority
                                 </button>
+                                @endif
                             </td>
                         @endif
                     </tr>

@@ -84,7 +84,9 @@ class UserManagementTest extends TestCase
         $routes = [
             ['GET', route('admin.users')], ['GET', route('admin.users.create')],
             ['POST', route('admin.users.store')], ['GET', route('admin.users.edit', $target)],
-            ['PUT', route('admin.users.update', $target)], ['DELETE', route('admin.users.destroy', $target)],
+            ['PUT', route('admin.users.update', $target)],
+            ['POST', route('admin.users.password.email', $target)], ['PATCH', route('admin.users.password.update', $target)],
+            ['DELETE', route('admin.users.destroy', $target)],
         ];
         foreach ($routes as [$method, $url]) {
             $this->call($method, $url)->assertRedirect(route('login'));

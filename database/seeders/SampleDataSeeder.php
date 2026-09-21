@@ -21,7 +21,7 @@ class SampleDataSeeder extends Seeder
         $dialA = User::where('role', 'dial_a')->first();
         if (!$dialA) {
             $dialA = User::updateOrCreate(
-                ['email' => 'diala@gateway.com'],
+                ['email' => 'dial.handyman@gateway.ph'],
                 [
                     'name' => 'Dial-A',
                     'designation' => 'Dial-A / Property Management Support',

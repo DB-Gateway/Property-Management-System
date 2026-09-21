@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DealerDirectoryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PropertyRequestController;
+use App\Http\Controllers\RequestAssignmentController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\WebPushController;
@@ -50,6 +51,9 @@ Route::middleware(['auth', EnsurePasswordChanged::class])->group(function () {
     Route::post('/requests', [PropertyRequestController::class, 'store'])->name('requests.store');
     Route::get('/inspection-request-template', [PropertyRequestController::class, 'inspectionRequestTemplate'])->name('requests.inspection.template');
     Route::get('/requests/{propertyRequest}', [PropertyRequestController::class, 'show'])->name('requests.show');
+    Route::patch('/requests/{propertyRequest}/assignment', [RequestAssignmentController::class, 'update'])->name('requests.assignment.update');
+    Route::patch('/requests/{propertyRequest}/in-house/work-order', [RequestAssignmentController::class, 'workOrder'])->name('requests.in-house.work-order');
+    Route::post('/requests/{propertyRequest}/in-house/completion', [RequestAssignmentController::class, 'completion'])->name('requests.in-house.completion');
     Route::patch('/requests/{propertyRequest}/schedule', [PropertyRequestController::class, 'updateSchedule'])->name('requests.schedule');
     Route::patch('/requests/{propertyRequest}/assign', [PropertyRequestController::class, 'assignToMe'])->name('requests.assign');
     Route::patch('/requests/{propertyRequest}/status', [PropertyRequestController::class, 'updateStatus'])->name('requests.status');
@@ -92,6 +96,8 @@ Route::middleware(['auth', EnsurePasswordChanged::class])->group(function () {
     Route::post('/admin/users', [UserController::class, 'store'])->name('admin.users.store');
     Route::get('/admin/users/{user}/edit', [UserController::class, 'edit'])->name('admin.users.edit');
     Route::put('/admin/users/{user}', [UserController::class, 'update'])->name('admin.users.update');
+    Route::post('/admin/users/{user}/password-email', [UserController::class, 'sendPasswordReset'])->name('admin.users.password.email');
+    Route::patch('/admin/users/{user}/password', [UserController::class, 'updatePassword'])->name('admin.users.password.update');
     Route::delete('/admin/users/{user}', [UserController::class, 'destroy'])->name('admin.users.destroy');
     Route::get('/admin/roles', [AdminController::class, 'roles'])->name('admin.roles');
     Route::get('/admin/audit-logs', [AdminController::class, 'auditLogs'])->name('admin.audit');

@@ -181,7 +181,7 @@ class ReportController extends Controller
 
         AuditLog::record(
             'report_published',
-            "PM Manager {$request->user()->name} published an operations report ({$records->count()} records).",
+            "{$request->user()->role_label} {$request->user()->name} published an operations report ({$records->count()} records).",
             null,
             $filters
         );
@@ -324,7 +324,7 @@ class ReportController extends Controller
     private function reportQuery(array $filters): Builder
     {
         $query = PropertyRequest::query()
-            ->with(['dealer', 'assignedSupport', 'assignedManager', 'requestFiles', 'workOrderFiles', 'serviceReportFiles']);
+            ->with(['dealer', 'assignedSupport', 'assignedManager', 'requestFiles', 'workOrderFiles', 'serviceReportFiles', 'inHouseCompletionFiles']);
 
         $stage = $filters['stage'] ?? null;
         $status = $filters['status'] ?? null;
@@ -466,7 +466,14 @@ class ReportController extends Controller
 
         $attachmentCounts = RequestAttachment::query()
             ->whereIn('property_request_id', $ids)
-            ->whereIn('category', ['request', 'work_order', 'service_report'])
+            ->whereIn('category', ['request', 'work_order', 'service_report', 'in_house_completion'])
+            ->where(function (Builder $files) {
+                $files->where('category', 'request')
+                    ->orWhere(fn (Builder $inHouse) => $inHouse->where('category', 'in_house_completion')
+                        ->whereHas('propertyRequest', fn (Builder $request) => $request->where('assignment_type', 'in_house')))
+                    ->orWhere(fn (Builder $dialA) => $dialA->whereIn('category', ['work_order', 'service_report'])
+                        ->whereHas('propertyRequest', fn (Builder $request) => $request->where('assignment_type', 'dial_a')));
+            })
             ->selectRaw('category, count(*) as count')
             ->groupBy('category')
             ->pluck('count', 'category');
@@ -474,6 +481,7 @@ class ReportController extends Controller
         $reqCount = (int) ($attachmentCounts['request'] ?? 0);
         $woCount = (int) ($attachmentCounts['work_order'] ?? 0);
         $srCount = (int) ($attachmentCounts['service_report'] ?? 0);
+        $inHouseCount = (int) ($attachmentCounts['in_house_completion'] ?? 0);
 
         return [
             'total' => (clone $query)->count(),
@@ -483,7 +491,9 @@ class ReportController extends Controller
             'dial_a_attachments' => $woCount + $srCount,
             'work_order_files' => $woCount,
             'service_report_files' => $srCount,
-            'all_attachments' => $reqCount + $woCount + $srCount,
+            'in_house_completion_files' => $inHouseCount,
+            'workflow_attachments' => $woCount + $srCount + $inHouseCount,
+            'all_attachments' => $reqCount + $woCount + $srCount + $inHouseCount,
         ];
     }
 }

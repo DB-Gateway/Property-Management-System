@@ -132,7 +132,7 @@ class ServiceReportTwoStepFlowTest extends TestCase
         // Dial-A visits request: sees Step 1 completed, uploaded file, and Step 2 "Done Service Report" button
         $showResponse = $this->actingAs($this->dialA)->get(route('requests.show', $request));
         $showResponse->assertOk();
-        $showResponse->assertSee('Step 1 Complete');
+        $showResponse->assertSee('Awaiting Confirmation');
         $showResponse->assertSee('service-photo.jpg');
         $showResponse->assertSee('Done Service Report');
 

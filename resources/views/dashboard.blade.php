@@ -4,6 +4,14 @@
 
 @section('content')
 
+@if($user->isManager() && ($counts['pm_review'] ?? 0) > 0)
+    <section class="panel monitoring-note wide-note">
+        <strong>{{ $counts['pm_review'] }} request(s) awaiting PM review</strong>
+        <p>Decide the priority, add remarks for the dealer, and assign each request.</p>
+        <a class="button button-primary" href="{{ route('requests.index', ['stage' => 'pm_review']) }}">Review Requests</a>
+    </section>
+@endif
+
 @if($user->isDialA() && !empty($awaitingCompletion) && $awaitingCompletion->isNotEmpty())
     <section class="panel" style="border: 2px solid #2563eb; background: #eff6ff; padding: 18px 22px; border-radius: 8px; margin-bottom: 24px;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">

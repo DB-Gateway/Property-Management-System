@@ -23,6 +23,7 @@
                 {{ $attachment->original_name }}
             </strong>
             <small>{{ number_format($attachment->size / 1024, 1) }} KB · Open</small>
+            @if($attachment->uploader_label)<small>c/o {{ $attachment->uploader_label }}</small>@endif
         </span>
     </a>
 @empty

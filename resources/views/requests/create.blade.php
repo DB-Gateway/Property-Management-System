@@ -48,11 +48,7 @@
                     @foreach($types as $type)<option value="{{ $type }}" data-suggestion="{{ $remarkSuggestions[$type] ?? '' }}" @selected(old('request_type') === $type)>{{ $type }}</option>@endforeach
                 </select>
             </div>
-            <div class="form-field"><label for="priority">Request Priority <em>*</em></label>
-                <select id="priority" name="priority" required>
-                    @foreach(['regular' => 'Regular', 'urgent' => 'Urgent'] as $value => $label)<option value="{{ $value }}" @selected(old('priority', 'regular') === $value)>{{ $label }}</option>@endforeach
-                </select>
-            </div>
+            <div class="form-field"><label>PM Review</label><p>Your request goes to the PM team first. They will set the priority, explain their decision, and assign the work to Dial-A or In house.</p></div>
         </div>
     </div>
 

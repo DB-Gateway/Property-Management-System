@@ -42,7 +42,7 @@ class RequestNotificationTest extends TestCase
         $this->admin = User::factory()->create(['role' => 'admin']);
     }
 
-    public function test_submission_notifies_only_active_dial_a_and_uses_four_day_deadline(): void
+    public function test_submission_notifies_pm_users_before_dial_a_and_uses_four_day_deadline(): void
     {
         $inactive = User::factory()->create(['role' => 'dial_a', 'is_active' => false]);
         $legacy = User::factory()->create(['role' => 'pm_support']);
@@ -52,9 +52,9 @@ class RequestNotificationTest extends TestCase
         ])->assertSessionHasNoErrors()->assertRedirect();
         $request = PropertyRequest::sole();
         $this->assertSame('2026-09-19', $request->due_date->toDateString());
-        $this->assertSame('new_request', $this->dialA->notifications()->sole()->data['kind']);
-        $this->assertSame(1, $legacy->notifications()->count());
-        foreach ([$this->admin, $this->dealer, $this->manager, $inactive] as $user) {
+        $this->assertSame('new_request', $this->manager->notifications()->sole()->data['kind']);
+        $this->assertSame(0, $legacy->notifications()->count());
+        foreach ([$this->admin, $this->dealer, $this->dialA, $inactive] as $user) {
             $this->assertSame(0, $user->notifications()->count());
         }
     }

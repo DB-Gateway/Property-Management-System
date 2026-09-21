@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\MailDelivery;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -66,12 +67,37 @@ class AuthController extends Controller
 
     public function sendResetLink(Request $request)
     {
+        $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
         $request->validate(['email' => ['required', 'email']]);
-        $status = Password::sendResetLink($request->only('email'));
+
+        $user = User::query()->where('email', $request->email)->where('is_active', true)->first();
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => 'No active account is registered with this email address. Please contact the IT administrator.',
+            ]);
+        }
+
+        if (! MailDelivery::usesSendingTransport()) {
+            throw ValidationException::withMessages([
+                'email' => 'Email password recovery is currently unavailable. Please contact the IT administrator.',
+            ]);
+        }
+
+        try {
+            $status = Password::sendResetLink(['email' => $user->email]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            throw ValidationException::withMessages([
+                'email' => 'The reset email could not be sent. Please contact the IT administrator.',
+            ]);
+        }
 
         return $status === Password::RESET_LINK_SENT
-            ? back()->with('status', __($status))
-            : back()->withErrors(['email' => __($status)]);
+            ? back()->with('status', 'Password reset instructions have been sent to your email address.')
+            : back()->withErrors(['email' => $status === Password::INVALID_USER
+                ? 'No active account is registered with this email address. Please contact the IT administrator.'
+                : __($status)]);
     }
 
     public function showResetPassword(Request $request, string $token)
@@ -84,7 +110,7 @@ class AuthController extends Controller
         $request->validate([
             'token' => ['required'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', 'min:8'],
+            'password' => ['required', 'confirmed', 'min:8', 'max:72'],
         ]);
 
         $status = Password::reset(
@@ -92,9 +118,12 @@ class AuthController extends Controller
             function (User $user, string $password) {
                 $user->forceFill([
                     'password' => Hash::make($password),
+                    'must_change_password' => false,
+                    'email_verified_at' => $user->email_verified_at ?? now(),
                     'remember_token' => Str::random(60),
                 ])->save();
 
+                AuditLog::record('password_reset', "Reset the password for {$user->name} using email authentication.", $user);
                 event(new PasswordReset($user));
             }
         );

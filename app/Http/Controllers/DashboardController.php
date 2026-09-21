@@ -11,7 +11,7 @@ class DashboardController extends Controller
         $user = auth()->user();
         $base = PropertyRequest::query();
         if ($user->isDialA()) {
-            $base->where('assignment_type', '!=', 'pending_review');
+            $base->where('assignment_type', '!=', 'pending_review')->where('assignment_phase', 'proceeded');
         }
 
         if ($user->isDealer()) {
@@ -20,7 +20,7 @@ class DashboardController extends Controller
 
         $agingCount = (clone $base)->overdue()->count();
         $counts = [
-            'pm_review' => (clone $base)->where('assignment_type', 'pending_review')->count(),
+            'pm_review' => (clone $base)->where(fn ($review) => $review->where('assignment_type', 'pending_review')->orWhere('assignment_phase', 'unassigned'))->count(),
             'total' => (clone $base)->count(),
             'not_acknowledged' => (clone $base)->notAcknowledged()->count(),
             'inspection_pending' => (clone $base)->stageStatus('inspection', 'pending')->count(),
@@ -57,6 +57,7 @@ class DashboardController extends Controller
             ? PropertyRequest::query()
                 ->with('dealer')
                 ->where('assignment_type', 'dial_a')
+                ->where('assignment_phase', 'proceeded')
                 ->where(function ($query) {
                     $query->whereNotNull('service_report_completed_at')
                         ->orWhereHas('serviceReportFiles');

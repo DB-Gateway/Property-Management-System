@@ -52,6 +52,8 @@ Route::middleware(['auth', EnsurePasswordChanged::class])->group(function () {
     Route::get('/inspection-request-template', [PropertyRequestController::class, 'inspectionRequestTemplate'])->name('requests.inspection.template');
     Route::get('/requests/{propertyRequest}', [PropertyRequestController::class, 'show'])->name('requests.show');
     Route::patch('/requests/{propertyRequest}/assignment', [RequestAssignmentController::class, 'update'])->name('requests.assignment.update');
+    Route::post('/requests/{propertyRequest}/assignment/proceed', [RequestAssignmentController::class, 'proceed'])->name('requests.assignment.proceed');
+    Route::post('/requests/{propertyRequest}/assignment/undo', [RequestAssignmentController::class, 'undo'])->name('requests.assignment.undo');
     Route::patch('/requests/{propertyRequest}/in-house/work-order', [RequestAssignmentController::class, 'workOrder'])->name('requests.in-house.work-order');
     Route::post('/requests/{propertyRequest}/in-house/completion', [RequestAssignmentController::class, 'completion'])->name('requests.in-house.completion');
     Route::patch('/requests/{propertyRequest}/schedule', [PropertyRequestController::class, 'updateSchedule'])->name('requests.schedule');

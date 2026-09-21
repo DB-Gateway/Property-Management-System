@@ -195,8 +195,8 @@
                         <td class="activity-progress-cell">@include('requests.partials.activity-progress', ['requestItem' => $item, 'compact' => true])</td>
                         @if(auth()->user()->isManager())
                             <td>
-                                @if($item->isAwaitingPmReview())
-                                    <a class="table-action" href="{{ route('requests.show', $item) }}#request-assignment">Review &amp; Assign</a>
+                                @if($item->isAwaitingPmReview() || $item->assigned_at)
+                                    <a class="table-action" href="{{ route('requests.show', $item) }}#request-assignment">{{ $item->isAwaitingPmReview() ? 'Assign' : ($item->isAssignmentStaged() ? 'Proceed' : 'View Assignment') }}</a>
                                 @else
                                 <button type="button" class="table-action button-link" data-open-priority-modal
                                         data-reference="{{ $item->reference_no }}"

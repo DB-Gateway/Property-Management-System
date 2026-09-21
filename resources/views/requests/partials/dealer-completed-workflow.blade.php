@@ -1,9 +1,5 @@
 
 
-<section class="panel monitoring-note wide-note">
-    <strong>Completed Request Record</strong>
-</section>
-
 <section class="panel workflow-card">
     <div class="workflow-card-head"><span class="workflow-title-icon">&#10003;</span><h2>Inspection Details</h2></div>
     <div class="inspection-readonly-grid">

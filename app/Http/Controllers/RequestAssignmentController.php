@@ -6,7 +6,6 @@ use App\Models\AuditLog;
 use App\Models\PropertyRequest;
 use App\Models\User;
 use App\Support\PmActionConfirmation;
-use App\Services\RequestNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -22,35 +21,27 @@ class RequestAssignmentController extends Controller
         PmActionConfirmation::validate($request);
         $validated = $request->validate([
             'assignment_type' => ['required', Rule::in(['dial_a', 'in_house'])],
-            'priority' => ['sometimes', 'required', Rule::in(['regular', 'urgent'])],
-            'remarks' => ['sometimes', 'required', 'string', 'max:1000'],
+            'priority' => ['required', Rule::in(['regular', 'urgent'])],
+            'remarks' => ['required', 'string', 'max:1000'],
         ], $this->passwordMessages());
 
         return DB::transaction(function () use ($request, $propertyRequest, $validated) {
             $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
             $isReview = $propertyRequest->isAwaitingPmReview();
-            if ($request->boolean('review_pending') && ! $isReview) {
-                throw ValidationException::withMessages(['review' => 'Another PM user has already reviewed this request. Refresh to see their decision before making changes.']);
-            }
-            if ($isReview) {
-                $request->validate([
-                    'priority' => ['required', Rule::in(['regular', 'urgent'])],
-                    'remarks' => ['required', 'string', 'max:1000'],
-                ]);
+            if (! $isReview) {
+                throw ValidationException::withMessages(['assignment' => $propertyRequest->hasProceeded()
+                    ? 'This request has proceeded. Only an Administrator can undo its assignment.'
+                    : 'Undo Assigned before editing the assignment decision.']);
             }
             $previousType = $propertyRequest->assignment_type;
-            $oldPriority = $propertyRequest->priority;
-            $decisionChanged = (isset($validated['priority']) && $validated['priority'] !== $propertyRequest->priority)
-                || (isset($validated['remarks']) && $validated['remarks'] !== $propertyRequest->priority_remarks);
-            if ($previousType === $validated['assignment_type'] && ! $decisionChanged) {
-                return $this->redirect($propertyRequest, 'Assignment is unchanged.');
-            }
 
             $actor = $request->user();
             $previousState = $propertyRequest->only(['status', 'completed_at', 'in_house_completed_at']);
             $updates = [
                 'assignment_type' => $validated['assignment_type'],
                 'assigned_at' => now(),
+                'assignment_phase' => 'assigned',
+                'assignment_proceeded_at' => null,
                 ...$this->actorSnapshot('assignment', $actor),
             ];
             if (isset($validated['priority'])) {
@@ -103,11 +94,44 @@ class RequestAssignmentController extends Controller
                     'remarks' => $propertyRequest->priority_remarks,
                 ]
             );
-            if ($previousType === $validated['assignment_type'] && $decisionChanged) {
-                app(RequestNotificationService::class)->priorityChanged($propertyRequest, $oldPriority, $propertyRequest->priority, $propertyRequest->priority_remarks);
-            }
 
-            return $this->redirect($propertyRequest, "Request assigned to {$label}.".($propertyRequest->isInHouse() ? ' Inspection Request recorded.' : ' The Dial-A workflow has been restored.'));
+            return $this->redirect($propertyRequest, "Request assigned to {$label}. Select Proceed to confirm, or Undo Assigned to edit the decision.");
+        });
+    }
+
+    public function proceed(Request $request, PropertyRequest $propertyRequest)
+    {
+        $this->ensurePmUser($request);
+        PmActionConfirmation::validate($request);
+
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            if (! $propertyRequest->isAssignmentStaged()) {
+                throw ValidationException::withMessages(['assignment' => 'Assign this request before proceeding. Refresh if it was already confirmed.']);
+            }
+            $propertyRequest->update(['assignment_phase' => 'proceeded', 'assignment_proceeded_at' => now()]);
+            AuditLog::record('request_assignment_proceeded', "{$propertyRequest->reference_no} assignment was confirmed by {$request->user()->role_label} {$request->user()->name}.", $propertyRequest);
+
+            return $this->redirect($propertyRequest, 'Assignment confirmed. Only an Administrator can undo it now.');
+        });
+    }
+
+    public function undo(Request $request, PropertyRequest $propertyRequest)
+    {
+        abort_unless($request->user()->isManager() || $request->user()->isAdmin(), 403);
+
+        return DB::transaction(function () use ($request, $propertyRequest) {
+            $propertyRequest = PropertyRequest::whereKey($propertyRequest->id)->lockForUpdate()->firstOrFail();
+            abort_if($propertyRequest->hasProceeded() && ! $request->user()->isAdmin(), 403, 'Only an Administrator can undo an assignment after Proceed.');
+            if ($propertyRequest->isAwaitingPmReview()) {
+                throw ValidationException::withMessages(['assignment' => 'The assignment is already open for editing.']);
+            }
+            PmActionConfirmation::validate($request);
+            $before = $propertyRequest->only(['assignment_type', 'assignment_phase', 'priority', 'priority_remarks', 'assigned_at', 'assignment_proceeded_at']);
+            $propertyRequest->update(['assignment_phase' => 'unassigned', 'assignment_proceeded_at' => null]);
+            AuditLog::record('request_assignment_undone', "{$propertyRequest->reference_no} assignment was reopened by {$request->user()->role_label} {$request->user()->name}.", $propertyRequest, ['before' => $before, 'workflow_and_files_retained' => true]);
+
+            return $this->redirect($propertyRequest, 'Assignment undone. The PM team can edit priority, remarks, and assignment again.');
         });
     }
 
@@ -244,8 +268,11 @@ class RequestAssignmentController extends Controller
 
     private function ensureInHouse(PropertyRequest $propertyRequest): void
     {
-        if (! $propertyRequest->isInHouse()) {
+        if (! $propertyRequest->isInHouse() || $propertyRequest->isAwaitingPmReview()) {
             throw ValidationException::withMessages(['assignment_type' => 'This request is assigned to Dial-A. Refresh the page before continuing.']);
+        }
+        if (! $propertyRequest->hasProceeded()) {
+            throw ValidationException::withMessages(['assignment' => 'Select Proceed before accessing the in-house workflow.']);
         }
     }
 

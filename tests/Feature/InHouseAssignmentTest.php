@@ -64,6 +64,7 @@ class InHouseAssignmentTest extends TestCase
             'request_date' => today(),
             'due_date' => today()->addDays(4),
             'status' => 'pending',
+            'assignment_phase' => 'unassigned',
         ])->refresh();
     }
 
@@ -79,9 +80,12 @@ class InHouseAssignmentTest extends TestCase
         $this->assertStringContainsString('Manager Maria', $this->propertyRequest->assignment_by_label);
         $this->assertStringContainsString('PM Manager', $this->propertyRequest->in_house_inspection_by_label);
 
+        $this->reopenAssignment();
         $this->actingAs($this->pmAdmin)->patch(route('requests.assignment.update', $this->propertyRequest), [
             'assignment_type' => 'dial_a', 'current_password' => 'PmAdminPass2026!',
+            'priority' => 'regular', 'remarks' => 'Dial-A will handle the remaining repair.',
         ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->post(route('requests.assignment.proceed', $this->propertyRequest), ['current_password' => 'PmAdminPass2026!'])->assertSessionHasNoErrors()->assertRedirect();
         $this->assignInHouse($this->pmAdmin, 'PmAdminPass2026!');
         $this->assertStringContainsString('PM Admin', $this->propertyRequest->assignment_by_label);
         $this->assertStringContainsString('Admin Alex', $this->propertyRequest->assignment_by_label);
@@ -107,6 +111,7 @@ class InHouseAssignmentTest extends TestCase
     {
         $this->actingAs($this->manager)->patch(route('requests.assignment.update', $this->propertyRequest), [
             'assignment_type' => 'in_house',
+            'priority' => 'regular', 'remarks' => 'The PM team can complete this repair.',
             'current_password' => 'ManagerPass2026!',
             'assignment_by_id' => $this->pmAdmin->id,
             'assignment_by_name' => 'Forged actor',
@@ -255,9 +260,12 @@ class InHouseAssignmentTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('current_password');
         $this->assertTrue($this->propertyRequest->refresh()->isInHouse());
 
+        $this->reopenAssignment();
         $this->actingAs($this->pmAdmin)->patch(route('requests.assignment.update', $this->propertyRequest), [
             'assignment_type' => 'dial_a', 'current_password' => 'PmAdminPass2026!',
+            'priority' => 'regular', 'remarks' => 'Dial-A will handle the remaining repair.',
         ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->post(route('requests.assignment.proceed', $this->propertyRequest), ['current_password' => 'PmAdminPass2026!'])->assertSessionHasNoErrors()->assertRedirect();
 
         $this->propertyRequest->refresh();
         $this->assertFalse($this->propertyRequest->isInHouse());
@@ -321,6 +329,8 @@ class InHouseAssignmentTest extends TestCase
 
         foreach ([$this->manager, $this->pmAdmin, $this->dealer] as $user) {
             $this->actingAs($user)->get(route('attachments.show', $attachment))
+                ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+            $this->get(route('attachments.show', ['attachment' => $attachment, 'download' => 1]))
                 ->assertOk()->assertDownload('completion-report.pdf');
         }
 
@@ -400,9 +410,12 @@ class InHouseAssignmentTest extends TestCase
             ->assertSee('internal-completion-photo.png')
             ->assertSee('src="'.route('attachments.show', $photo).'"', false);
 
+        $this->reopenAssignment();
         $this->actingAs($this->pmAdmin)->patch(route('requests.assignment.update', $this->propertyRequest), [
             'assignment_type' => 'dial_a', 'current_password' => 'PmAdminPass2026!',
+            'priority' => 'regular', 'remarks' => 'Dial-A will handle the remaining repair.',
         ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->post(route('requests.assignment.proceed', $this->propertyRequest), ['current_password' => 'PmAdminPass2026!'])->assertSessionHasNoErrors()->assertRedirect();
 
         $this->actingAs($this->pmAdmin)->get(route('reports.print', ['search' => $this->propertyRequest->reference_no]))
             ->assertOk()
@@ -432,11 +445,24 @@ class InHouseAssignmentTest extends TestCase
 
     private function assignInHouse(User $user, string $password): void
     {
+        if (! $this->propertyRequest->fresh()->isAwaitingPmReview()) {
+            $this->reopenAssignment();
+        }
         $this->actingAs($user)->patch(route('requests.assignment.update', $this->propertyRequest), [
             'assignment_type' => 'in_house', 'current_password' => $password,
+            'priority' => 'regular', 'remarks' => 'The PM team can complete this repair.',
         ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->post(route('requests.assignment.proceed', $this->propertyRequest), ['current_password' => $password])->assertSessionHasNoErrors()->assertRedirect();
         $this->propertyRequest->refresh();
         $this->assertTrue($this->propertyRequest->isInHouse());
+    }
+
+    private function reopenAssignment(): void
+    {
+        $administrator = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($administrator)->post(route('requests.assignment.undo', $this->propertyRequest), ['current_password' => 'password'])
+            ->assertSessionHasNoErrors()->assertRedirect();
+        $this->propertyRequest->refresh();
     }
 
     private function saveWorkOrder(User $user, string $password, string $workOrder = 'Replace the damaged lighting fixtures.'): void

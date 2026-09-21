@@ -745,6 +745,7 @@ class GatewaySystemTest extends TestCase
             'current_password' => 'password',
         ])->assertSessionHasNoErrors()->assertRedirect();
         $this->assertSame($designatedLead->id, $request->fresh()->assigned_support_id);
+        $this->post(route('requests.assignment.proceed', $request), ['current_password' => 'password'])->assertSessionHasNoErrors()->assertRedirect();
 
         // 2. PM Manager views request: strictly view-only, no acknowledgement approval form
         $this->actingAs($manager)->get(route('requests.show', $request))

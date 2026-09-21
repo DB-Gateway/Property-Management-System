@@ -34,6 +34,23 @@ class RequestNotificationService
         $recipients = $this->stakeholders($request);
         $event = (string) Str::uuid();
 
+        if ($request->wasChanged('assignment_phase')) {
+            if ($request->hasProceeded()) {
+                $users = $request->isInHouse() ? $recipients : $recipients->merge($this->dialAUsers())->unique('id');
+                $label = $request->isInHouse() ? 'In house' : 'Dial-A';
+                $this->send($request, $users, 'assignment_proceeded', 'Assignment confirmed',
+                    "{$request->reference_no}: Proceed confirmed for {$label}. Priority: ".ucfirst($request->priority).'. Remarks: '.$request->priority_remarks,
+                    "{$event}:proceeded");
+            } else {
+                $label = $request->isAssignmentStaged() ? 'Assigned — awaiting Proceed' : 'Assignment reopened for PM review';
+                $this->send($request, $recipients, 'assignment_changed', $label,
+                    "{$request->reference_no}: {$label}. Priority: ".ucfirst($request->priority).'. Remarks: '.$request->priority_remarks,
+                    "{$event}:assignment");
+            }
+            $this->retireReminders($request);
+            return;
+        }
+
         if ($request->wasChanged('assignment_type')) {
             $inHouse = $request->assignment_type === 'in_house';
             $label = $inHouse ? 'In house' : 'Dial-A';
@@ -204,7 +221,7 @@ class RequestNotificationService
                         if (! $request || $request->status === 'completed' || $request->completed_at) {
                             return;
                         }
-                        if ($request->isAwaitingPmReview()) {
+                        if (! $request->hasProceeded()) {
                             if ($request->is_overdue) {
                                 $this->sendReminder($request, $pmRecipients, 'pm_review', 'ageing', 'PM review pending',
                                     "{$request->reference_no}: Review the priority, remarks, and assignment before work begins.");

@@ -26,13 +26,24 @@ class PropertyRequest extends Model
         'in_house_completion_by_id', 'in_house_completion_by_name', 'in_house_completion_by_role', 'in_house_completed_at',
         'dial_a_status', 'dial_a_completed_at',
         'pm_reviewed_at', 'pm_reviewed_by_id', 'pm_reviewed_by_name', 'pm_reviewed_by_role',
+        'assignment_phase', 'assignment_proceeded_at',
     ];
 
-    protected $attributes = ['assignment_type' => 'dial_a'];
+    protected $attributes = ['assignment_type' => 'dial_a', 'assignment_phase' => 'proceeded'];
 
     public function isAwaitingPmReview(): bool
     {
-        return $this->assignment_type === 'pending_review';
+        return $this->assignment_type === 'pending_review' || $this->assignment_phase === 'unassigned';
+    }
+
+    public function hasProceeded(): bool
+    {
+        return ! $this->isAwaitingPmReview() && $this->assignment_phase === 'proceeded';
+    }
+
+    public function isAssignmentStaged(): bool
+    {
+        return $this->assignment_phase === 'assigned';
     }
 
     public function getPriorityLabelAttribute(): string
@@ -139,6 +150,7 @@ class PropertyRequest extends Model
             'in_house_completed_at' => 'datetime',
             'dial_a_completed_at' => 'datetime',
             'pm_reviewed_at' => 'datetime',
+            'assignment_proceeded_at' => 'datetime',
         ];
     }
 
@@ -199,7 +211,7 @@ class PropertyRequest extends Model
 
     public function isAssignedTo(User $user): bool
     {
-        return $this->assignment_type === 'dial_a' && $user->isDialA() && ($this->assigned_support_id === null || $this->assigned_support_id === $user->id);
+        return $this->hasProceeded() && $this->assignment_type === 'dial_a' && $user->isDialA() && ($this->assigned_support_id === null || $this->assigned_support_id === $user->id);
     }
 
     public function getIsOverdueAttribute(): bool
@@ -276,7 +288,7 @@ class PropertyRequest extends Model
 
     public function isAwaitingDialACompletion(): bool
     {
-        if ($this->isInHouse()) {
+        if (! $this->hasProceeded() || $this->isInHouse()) {
             return false;
         }
 
@@ -290,6 +302,9 @@ class PropertyRequest extends Model
     {
         if ($this->isAwaitingPmReview()) {
             return 'Awaiting PM Review';
+        }
+        if ($this->isAssignmentStaged()) {
+            return 'Assigned — Awaiting Proceed';
         }
         if ($this->isAwaitingDialACompletion()) {
             return 'Awaiting Dial-A Confirmation';
@@ -311,6 +326,14 @@ class PropertyRequest extends Model
                 $this->progressStep('PM Review', false, true),
                 $this->progressStep('Inspection', false, false),
                 $this->progressStep('Work Order', false, false),
+                $this->progressStep('Completion', false, false),
+            ];
+        }
+        if ($this->isAssignmentStaged()) {
+            return [
+                $this->progressStep('Assigned', true, true),
+                $this->progressStep('Proceed', false, true),
+                $this->progressStep('Work Order', $this->isInHouse() && (bool) $this->in_house_work_order_at, false),
                 $this->progressStep('Completion', false, false),
             ];
         }

@@ -48,7 +48,7 @@
                     <span>Priority</span>
                     <strong>
                         <span class="badge priority-{{ $propertyRequest->priority }}">{{ $propertyRequest->priority_label }}</span>
-                        @if($viewer->isManager() && !$propertyRequest->isAwaitingPmReview())
+                        @if($viewer->isManager() && !$propertyRequest->assigned_at && !$propertyRequest->isAwaitingPmReview())
                             <button type="button" class="button button-light button-xs" data-open-priority-modal
                                     data-reference="{{ $propertyRequest->reference_no }}"
                                     data-priority="{{ $propertyRequest->priority }}"
@@ -91,7 +91,9 @@
         </div>
     </section>
 
-    @include('requests.partials.assignment-panel')
+    @if(!$viewer->isDialA() && !$viewer->isDealer())
+        @include('requests.partials.assignment-panel')
+    @endif
 
     <section class="panel workflow-card activity-overview-card">
         <div class="workflow-card-head"><span class="workflow-title-icon">◷</span><h2>Activity Progress</h2><span class="workflow-help-inline">Workbook workflow</span></div>
@@ -103,17 +105,12 @@
     
 
     @if($propertyRequest->isAwaitingPmReview())
-        <section class="panel monitoring-note wide-note"><strong>PM Review Required</strong><p>Work begins after a PM user confirms the priority, remarks, and assignment.</p></section>
+        {{-- Workflow controls remain unavailable until PM review is complete. --}}
     @elseif($propertyRequest->isInHouse())
         @if($viewer->isManager() && $isFullyCompleted)
             <div><a class="button button-primary" href="{{ route('reports.print', ['search' => $propertyRequest->reference_no]) }}" target="_blank" rel="noopener">Print / Publish Report (PDF)</a></div>
         @endif
     @elseif($viewer->isManager())
-        <section class="panel monitoring-note wide-note">
-            <strong>{{ $viewer->role_label }} Workflow Controls</strong>
-            <p>PM users can assign requests to Dial-A or In house, update priority, and publish completed request reports. This request currently uses the Dial-A workflow.</p>
-        </section>
-
         @if($inspectionDone)
             <section class="panel workflow-card">
                 <div class="workflow-card-head"><span class="workflow-title-icon">✓</span><h2>Inspection Details</h2></div>
@@ -171,10 +168,6 @@
                 default => 'completed',
             };
         @endphp
-
-        <div class="processing-heading">
-            <h1>WORKFLOW</h1>
-        </div>
 
         {{-- Stage 1: Inspection (Dial-A) --}}
         @if(session('status') && $noticeStage === 'inspection')
@@ -338,7 +331,6 @@
                         <div class="locked-stage-message"></div>
                     @endif
                 @else
-                    <div class="locked-stage-message">Complete the inspection to unlock this stage.</div>
                 @endif
             </div>
         </section>
@@ -444,10 +436,6 @@
             'workOrderRepresentativesList' => $workOrderRepresentativesList,
         ])
     @elseif($viewer->isAdmin())
-        <section class="panel monitoring-note wide-note">
-            <strong>Administrator workflow controls</strong>
-            <p>Administrators can monitor request activities and undo completed workflow steps when a correction is required. Only Dial-A can complete reopened steps and upload replacement documents.</p>
-        </section>
         @if($inspectionDone)
             <section class="panel workflow-card">
                 <div class="workflow-card-head"><span class="workflow-title-icon">✓</span><h2>Inspection Details</h2></div>

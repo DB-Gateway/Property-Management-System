@@ -159,7 +159,7 @@ class PropertyRequestController extends Controller
 
         $baseCounts = PropertyRequest::query();
         if ($user->isDialA()) {
-            $baseCounts->where('assignment_type', '!=', 'pending_review');
+            $baseCounts->where('assignment_type', '!=', 'pending_review')->where('assignment_phase', 'proceeded');
         }
         if ($user && $user->isDealer()) {
             $baseCounts->where('submitted_by', $user->id);
@@ -167,7 +167,7 @@ class PropertyRequestController extends Controller
 
         $agingCount = (clone $baseCounts)->overdue()->count();
         $counts = [
-            'pm_review' => (clone $baseCounts)->where('assignment_type', 'pending_review')->count(),
+            'pm_review' => (clone $baseCounts)->where(fn ($review) => $review->where('assignment_type', 'pending_review')->orWhere('assignment_phase', 'unassigned'))->count(),
             'total' => (clone $baseCounts)->count(),
             'not_acknowledged' => (clone $baseCounts)->notAcknowledged()->count(),
             'inspection_pending' => (clone $baseCounts)->stageStatus('inspection', 'pending')->count(),
@@ -273,7 +273,7 @@ class PropertyRequestController extends Controller
         $query = PropertyRequest::query()
             ->with(['dealer', 'assignedSupport'])
             ->when($user->isDealer(), fn ($q) => $q->where('submitted_by', $user->id))
-            ->when($user->isDialA(), fn ($q) => $q->where('assignment_type', '!=', 'pending_review'))
+            ->when($user->isDialA(), fn ($q) => $q->where('assignment_type', '!=', 'pending_review')->where('assignment_phase', 'proceeded'))
             ->when(! (in_array('pm_review', [$request->stage, $request->status], true) && ! $request->filled('month') && ! $request->filled('period_month')),
                 fn ($q) => $q->whereDate('request_date', '>=', $monthFrom->toDateString())
                     ->whereDate('request_date', '<=', $monthTo->toDateString()));
@@ -361,7 +361,7 @@ class PropertyRequestController extends Controller
             ->when($request->filled('stage'), function ($q) use ($request) {
                 $stage = $request->stage;
                 if ($stage === 'pm_review') {
-                    $q->where('assignment_type', 'pending_review');
+                    $q->where(fn ($review) => $review->where('assignment_type', 'pending_review')->orWhere('assignment_phase', 'unassigned'));
                 } elseif ($stage === 'not_acknowledged' || $stage === 'for_acknowledgement') {
                     $q->notAcknowledged();
                 } elseif ($request->filled('status') && $request->status !== 'all') {
@@ -373,7 +373,7 @@ class PropertyRequestController extends Controller
             ->when(!$request->filled('stage') && $request->filled('status'), function ($q) use ($request) {
                 $status = $request->status;
                 if ($status === 'pm_review') {
-                    $q->where('assignment_type', 'pending_review');
+                    $q->where(fn ($review) => $review->where('assignment_type', 'pending_review')->orWhere('assignment_phase', 'unassigned'));
                 } elseif (in_array($status, ['overdue', 'aging'], true)) {
                     $q->overdue();
                 } elseif ($status === 'not_acknowledged' || $status === 'for_acknowledgement') {
@@ -504,6 +504,7 @@ class PropertyRequestController extends Controller
                 'submitted_by' => $user->id,
                 'assigned_support_id' => null,
                 'assignment_type' => 'pending_review',
+                'assignment_phase' => 'unassigned',
                 'submitter_name' => $validated['name'],
                 'designation' => $validated['designation'],
                 'branch' => $branch,
@@ -667,6 +668,7 @@ class PropertyRequestController extends Controller
     {
         abort_unless($request->user()->isManager() || $request->user()->isAdmin(), 403, 'Only PM Managers can edit priority status.');
         abort_if($propertyRequest->isAwaitingPmReview(), 422, 'Complete the PM review with priority, remarks, and assignment first.');
+        abort_if($propertyRequest->assigned_at && ! $propertyRequest->isAwaitingPmReview(), 422, 'The assignment decision is locked. Undo Assigned before editing it. After Proceed, only an Administrator can undo it.');
         PmActionConfirmation::validate($request);
 
         $validated = $request->validate([
@@ -1538,18 +1540,22 @@ class PropertyRequestController extends Controller
         $this->ensureCanView($request, $attachment->propertyRequest);
         abort_unless(Storage::exists($attachment->path), 404);
 
-        if (! $attachment->isImage()) {
+        $headers = [
+            'Content-Type' => $attachment->isPdf() ? 'application/pdf' : $attachment->mime_type,
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ];
+
+        if ($request->boolean('download') || (! $attachment->isImage() && ! $attachment->isPdf())) {
             return response()->download(
                 Storage::path($attachment->path),
                 $attachment->original_name,
-                ['Content-Type' => $attachment->mime_type]
+                $headers
             );
         }
 
-        return response()->file(Storage::path($attachment->path), [
-            'Content-Type' => $attachment->mime_type,
-            'Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"',
-        ]);
+        return response()->file(Storage::path($attachment->path), $headers)
+            ->setContentDisposition('inline', $attachment->original_name);
     }
 
     public function destroyRequest(Request $request, PropertyRequest $propertyRequest)
@@ -1569,15 +1575,11 @@ class PropertyRequestController extends Controller
 
         $referenceNo = $propertyRequest->reference_no;
         $attachmentPaths = $propertyRequest->attachments()->pluck('path')->all();
-        $deletedCounts = [
-            'attachments' => count($attachmentPaths),
-        ];
+        $deletedCounts = ['attachments' => count($attachmentPaths)];
 
         DB::transaction(function () use ($propertyRequest) {
             AuditLog::where('subject_type', 'PropertyRequest')
-                ->where('subject_id', $propertyRequest->id)
-                ->delete();
-
+                ->where('subject_id', $propertyRequest->id)->delete();
             $propertyRequest->notifications()->delete();
             $propertyRequest->delete();
         });
@@ -1590,10 +1592,7 @@ class PropertyRequestController extends Controller
             'request_deleted',
             "{$referenceNo} was permanently deleted by administrator {$request->user()->name}.",
             null,
-            [
-                'reference_no' => $referenceNo,
-                'attachments_removed' => $deletedCounts['attachments'],
-            ]
+            ['reference_no' => $referenceNo, 'attachments_removed' => $deletedCounts['attachments']]
         );
 
         return redirect()->route('requests.index')->with(
@@ -1604,7 +1603,7 @@ class PropertyRequestController extends Controller
 
     private function ensureCanView(Request $request, PropertyRequest $propertyRequest): void
     {
-        abort_if($request->user()->isDialA() && $propertyRequest->isAwaitingPmReview(), 403, 'This request is awaiting PM review.');
+        abort_if($request->user()->isDialA() && ! $propertyRequest->hasProceeded(), 403, 'This request is awaiting PM confirmation.');
         if ($request->user()->isDealer() && $propertyRequest->submitted_by !== $request->user()->id) {
             abort(403);
         }
@@ -1612,7 +1611,7 @@ class PropertyRequestController extends Controller
 
     private function ensureDialAWorkflow(PropertyRequest $propertyRequest): void
     {
-        abort_unless($propertyRequest->assignment_type === 'dial_a', 403, 'The PM team must review and assign this request to Dial-A before work can begin.');
+        abort_unless($propertyRequest->hasProceeded() && $propertyRequest->assignment_type === 'dial_a', 403, 'The PM team must assign and proceed this request to Dial-A before work can begin.');
     }
 
     private function ensureAssignedSupport(Request $request, PropertyRequest $propertyRequest): void

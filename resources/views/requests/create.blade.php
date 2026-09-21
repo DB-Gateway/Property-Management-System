@@ -48,7 +48,6 @@
                     @foreach($types as $type)<option value="{{ $type }}" data-suggestion="{{ $remarkSuggestions[$type] ?? '' }}" @selected(old('request_type') === $type)>{{ $type }}</option>@endforeach
                 </select>
             </div>
-            <div class="form-field"><label>PM Review</label><p>Your request goes to the PM team first. They will set the priority, explain their decision, and assign the work to Dial-A or In house.</p></div>
         </div>
     </div>
 
@@ -72,54 +71,4 @@
     <div class="form-actions"><a class="button button-light" href="{{ route('requests.index') }}">Cancel</a><button class="button button-primary" type="submit">Submit Request</button></div>
 </form>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const fileInput = document.getElementById('attachments');
-    const previewGrid = document.querySelector('[data-attachment-preview]');
-    if (!fileInput || !previewGrid) return;
-
-    function formatSize(bytes) {
-        return bytes >= 1048576
-            ? (bytes / 1048576).toFixed(1) + ' MB'
-            : Math.max(1, Math.round(bytes / 1024)) + ' KB';
-    }
-
-    fileInput.addEventListener('change', function () {
-        previewGrid.replaceChildren();
-        const files = Array.from(fileInput.files);
-        if (!files.length) return;
-
-        files.forEach(function (file) {
-            const card = document.createElement('div');
-            card.className = 'attachment-preview-card';
-
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const img = document.createElement('img');
-                    img.src = e.target.result;
-                    img.alt = file.name;
-                    card.prepend(img);
-                };
-                reader.readAsDataURL(file);
-            } else {
-                const icon = document.createElement('span');
-                icon.className = 'attachment-preview-icon';
-                icon.textContent = file.name.split('.').pop().toUpperCase();
-                card.append(icon);
-            }
-
-            const info = document.createElement('span');
-            info.className = 'attachment-preview-name';
-            info.textContent = file.name;
-
-            const size = document.createElement('small');
-            size.textContent = formatSize(file.size);
-
-            card.append(info, size);
-            previewGrid.append(card);
-        });
-    });
-});
-</script>
 @endsection

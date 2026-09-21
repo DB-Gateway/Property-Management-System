@@ -53,8 +53,9 @@ class RequestNotificationTest extends TestCase
         $request = PropertyRequest::sole();
         $this->assertSame('2026-09-19', $request->due_date->toDateString());
         $this->assertSame('new_request', $this->manager->notifications()->sole()->data['kind']);
+        $this->assertSame(0, $this->admin->notifications()->count());
         $this->assertSame(0, $legacy->notifications()->count());
-        foreach ([$this->admin, $this->dealer, $this->dialA, $inactive] as $user) {
+        foreach ([$this->dealer, $this->dialA, $inactive] as $user) {
             $this->assertSame(0, $user->notifications()->count());
         }
     }

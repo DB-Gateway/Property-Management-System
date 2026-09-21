@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Completed Requests Operations Report · Gateway PMS</title>
+    <link rel="stylesheet" href="{{ asset('css/attachment-preview.css') }}?v={{ filemtime(public_path('css/attachment-preview.css')) }}">
+    <script src="{{ asset('js/attachment-preview.js') }}?v={{ filemtime(public_path('js/attachment-preview.js')) }}" defer></script>
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; color: #172b42; font: 11px Arial, sans-serif; background: #eef2f6; }
@@ -313,7 +315,7 @@
                     <th>Request Photos / Attachments</th>
                     <th>Priority</th>
                     <th>Status</th>
-                    <th>Assigned to</th>
+                    <th>To Assign</th>
                     <th>Workflow Details &amp; Attachments</th>
                     <th>Submitted By</th>
                 </tr>
@@ -368,7 +370,7 @@
                                     <strong>Completion Report</strong><br>c/o {{ $item->in_house_completion_by_label }}
                                     <ul class="print-file-text-list">
                                         @foreach($item->inHouseCompletionFiles as $file)
-                                            <li><a href="{{ route('attachments.show', $file) }}">{{ $file->original_name }}</a>@if($file->uploader_label)<br>c/o {{ $file->uploader_label }}@endif</li>
+                                            <li><a href="{{ route('attachments.show', $file) }}" @include('partials.attachment-preview-attributes', ['attachment' => $file])>{{ $file->original_name }}</a>@if($file->uploader_label)<br>c/o {{ $file->uploader_label }}@endif</li>
                                         @endforeach
                                     </ul>
                                 </div>
@@ -463,14 +465,14 @@
                         <span>&bull;</span>
                         <span><strong>Submitted By:</strong> {{ $attachment['request']->submitter_name }} ({{ $attachment['request']->designation }})</span>
                         <span>&bull;</span>
-                        <span><strong>Assigned to:</strong> {{ $attachment['request']->isInHouse() ? 'In house — '.$attachment['request']->in_house_completion_by_label : ($attachment['request']->assignedSupport?->name ?? 'Unassigned') }}</span>
+                        <span><strong>To Assign:</strong> {{ $attachment['request']->isInHouse() ? 'In house — '.$attachment['request']->in_house_completion_by_label : ($attachment['request']->assignedSupport?->name ?? 'Unassigned') }}</span>
                         <span>&bull;</span>
                         <span><strong>File Size:</strong> {{ number_format($attachment['file']->size / 1024, 1) }} KB</span>
                     </div>
                 </div>
 
                 <div class="attachment-image-display">
-                    <img class="print-actual-picture" src="{{ route('attachments.show', $attachment['file']) }}" alt="{{ $attachment['file']->original_name }}" loading="eager">
+                    <img data-attachment-image class="print-actual-picture" src="{{ route('attachments.show', $attachment['file']) }}" alt="{{ $attachment['file']->original_name }}" loading="eager">
                 </div>
             </div>
 
@@ -480,5 +482,6 @@
             </footer>
         </section>
     @endforeach
+    @include('partials.attachment-preview')
 </body>
 </html>

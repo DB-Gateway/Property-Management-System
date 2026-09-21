@@ -9,28 +9,21 @@
     <div class="workflow-card-head">
         <span class="workflow-title-icon" aria-hidden="true">&#8644;</span>
         <h2>Request Assignment</h2>
-        <span class="assignment-route-badge {{ $inHouse ? 'assignment-in-house' : '' }}">{{ $awaitingReview ? 'Awaiting PM Review' : ($inHouse ? 'In house' : 'Dial-A') }}</span>
+        <span class="assignment-route-badge {{ $inHouse ? 'assignment-in-house' : '' }}">{{ $awaitingReview ? 'Awaiting PM Review' : ($inHouse ? 'In house' : 'Dial-A') }}{{ $propertyRequest->isAssignmentStaged() ? ' — Awaiting Proceed' : '' }}</span>
     </div>
 
     <div class="assignment-panel-body">
         @if($awaitingReview)
-            <p class="assignment-attribution">The PM team will decide the priority, explain the decision, and assign this request before work begins.</p>
         @elseif($propertyRequest->assignment_by_label)
-            <p class="assignment-attribution">Assigned by <strong>{{ $propertyRequest->assignment_by_label }}</strong>
-                @if($propertyRequest->assigned_at)<span>{{ $propertyRequest->assigned_at->format('M d, Y h:i A') }}</span>@endif
-            </p>
         @else
-            <p class="assignment-attribution">Assigned to Dial-A when the dealer submitted this request.</p>
         @endif
 
         @if($propertyRequest->pm_reviewed_at)
-            <p class="assignment-attribution">Reviewed by <strong>{{ $propertyRequest->pm_reviewer_label }}</strong><span>{{ $propertyRequest->pm_reviewed_at->format('M d, Y h:i A') }}</span></p>
         @endif
         @if(!$awaitingReview && $propertyRequest->priority_remarks)
-            <div class="in-house-work-order-text"><strong>PM decision: {{ $propertyRequest->priority_label }}</strong><br>{{ $propertyRequest->priority_remarks }}</div>
         @endif
 
-        @if($canManageAssignment)
+        @if($canManageAssignment && $awaitingReview)
             <form method="POST" action="{{ route('requests.assignment.update', $propertyRequest) }}" class="assignment-form" data-pm-confirm-form data-pm-action="{{ $awaitingReview ? 'Confirm PM Review' : 'Confirm Assignment and Priority' }}">
                 @csrf @method('PATCH')
                 @if($awaitingReview)<input type="hidden" name="review_pending" value="1">@endif
@@ -52,12 +45,46 @@
                     <label for="review_remarks">Decision remarks for the dealer</label>
                     <textarea id="review_remarks" name="remarks" rows="3" maxlength="1000" required placeholder="Explain why you chose this priority and assignment.">{{ old('remarks', $propertyRequest->priority_remarks) }}</textarea>
                 </div>
-                <button class="button button-primary" type="submit">{{ $awaitingReview ? 'Review & Assign' : 'Re-assign / Proceed' }}</button>
+                <button class="button button-primary" type="submit">Assign</button>
                 <p class="assignment-form-help">Your decision and remarks will be visible to the dealer. Continue to confirm this action.</p>
             </form>
+        @elseif(!$awaitingReview)
+            <div class="assignment-locked-fields">
+                <div class="form-field"><label>Priority</label><input value="{{ $propertyRequest->priority_label }}" readonly></div>
+                <div class="form-field"><label>To Assign</label><input value="{{ $inHouse ? 'In house' : 'Dial-A' }}" readonly></div>
+                <div class="form-field assignment-remarks"><label>Decision remarks for the dealer</label><textarea rows="3" readonly>{{ $propertyRequest->priority_remarks }}</textarea></div>
+            </div>
+            @if($propertyRequest->isAssignmentStaged() && $canManageAssignment)
+                <div class="assignment-action-row">
+                    <form method="POST" action="{{ route('requests.assignment.proceed', $propertyRequest) }}" data-pm-confirm-form data-pm-action="Proceed with Assignment">
+                        @csrf
+                        <button class="button button-primary" type="submit">Proceed</button>
+                    </form>
+                </div>
+                <form method="POST" action="{{ route('requests.assignment.undo', $propertyRequest) }}" data-pm-confirm-form data-pm-action="Undo Assigned">
+                    @csrf
+                    <button class="button button-danger" type="submit">Undo Assigned</button>
+                </form>
+                <p class="assignment-form-help">After Proceed, only an Administrator can undo this assignment.</p>
+            @elseif($propertyRequest->hasProceeded())
+                <p class="assignment-attribution"><strong>Proceeded</strong>@if($propertyRequest->assignment_proceeded_at)<span>{{ $propertyRequest->assignment_proceeded_at->format('M d, Y h:i A') }}</span>@endif</p>
+            @endif
+            @if($viewer->isAdmin())
+                <div class="assignment-action-row assignment-admin-actions">
+                    <form method="POST" action="{{ route('requests.assignment.undo', $propertyRequest) }}" data-admin-password-form data-action-title="Undo Assigned" data-action-description="Reopen priority, remarks, and assignment for the PM team. Work is paused until they assign and proceed again. Existing work and attachments are retained.">
+                        @csrf
+                        <input type="hidden" name="current_password" data-admin-password-field>
+                        <button class="button button-danger" type="submit">Undo Assigned</button>
+                    </form>
+                </div>
+            @endif
         @endif
 
-        @if($inHouse)
+        @if($inHouse && $propertyRequest->isAssignmentStaged())
+            <p class="assignment-form-help">Select Proceed to open the in-house workflow and Work Order.</p>
+        @endif
+
+        @if($inHouse && $propertyRequest->hasProceeded())
             <div class="in-house-workflow">
                 <div class="in-house-step">
                     <div class="in-house-step-heading"><span class="in-house-step-number">1</span><h3>Inspection Request</h3><span class="stage-status stage-complete">Requested</span></div>

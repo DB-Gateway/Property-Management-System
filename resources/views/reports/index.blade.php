@@ -287,9 +287,9 @@
                                 @if($reportFiles->isNotEmpty())
                                     <div class="attachment-chips">
                                         @foreach($reportFiles as $file)
-                                            <a class="attachment-chip" href="{{ route('attachments.show', $file) }}" target="_blank" rel="noopener" title="{{ $file->original_name }} ({{ number_format($file->size / 1024, 1) }} KB)">
+                                            <a class="attachment-chip" href="{{ route('attachments.show', $file) }}" @include('partials.attachment-preview-attributes', ['attachment' => $file]) title="{{ $file->original_name }} ({{ number_format($file->size / 1024, 1) }} KB)">
                                                 @if($file->isImage())
-                                                    <img class="chip-img" src="{{ route('attachments.show', $file) }}" alt="{{ $file->original_name }}">
+                                                    <img data-attachment-image class="chip-img" src="{{ route('attachments.show', $file) }}" alt="{{ $file->original_name }}">
                                                 @else
                                                     <span class="workflow-file-badge {{ $file->fileBadgeClass() }}" style="font-size: 9px; padding: 2px 4px; margin-right: 4px;">{{ $file->fileTypeLabel() }}</span>
                                                 @endif

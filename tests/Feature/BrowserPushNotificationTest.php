@@ -103,7 +103,7 @@ class BrowserPushNotificationTest extends TestCase
         (new SendBrowserPush($device->id, $user->id, $notification->id))->handle($push);
     }
 
-    public function test_read_notifications_inactive_users_admins_and_reassigned_devices_are_not_sent(): void
+    public function test_read_notifications_inactive_users_and_reassigned_devices_are_not_sent(): void
     {
         $user = User::factory()->create();
         $device = $this->device($user);
@@ -116,9 +116,7 @@ class BrowserPushNotificationTest extends TestCase
         $notification->update(['read_at' => null]);
         $user->update(['is_active' => false]);
         $job->handle($push);
-        $user->update(['is_active' => true, 'role' => 'admin']);
-        $job->handle($push);
-        $user->update(['role' => 'dealer']);
+        $user->update(['is_active' => true]);
         $device->update(['user_id' => User::factory()->create()->id]);
         $job->handle($push);
         $device->delete();

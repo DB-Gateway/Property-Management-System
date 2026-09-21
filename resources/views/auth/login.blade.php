@@ -44,8 +44,7 @@
         <div class="login-logo">
             <img class="logo-emblem-image" src="{{ asset('images/G-logo-no-bg.png') }}" alt="Gateway emblem">
         </div>
-        <p class="login-brand">GATEWAY PROPERTY MANAGEMENT</p>
-        <p class="login-subtitle">Property Management System</p>
+        <p class="login-brand">GATEWAY PROPERTY MANAGEMENT SYSTEM</p>
 
         @if(session('status'))<div class="auth-status">{{ session('status') }}</div>@endif
         @if($errors->any())<div class="auth-error">{{ $errors->first() }}</div>@endif

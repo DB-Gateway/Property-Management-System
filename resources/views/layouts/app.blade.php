@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/notifications.css') }}?v={{ filemtime(public_path('css/notifications.css')) }}">
     @stack('styles')
+    <link rel="stylesheet" href="{{ asset('css/attachment-preview.css') }}?v={{ filemtime(public_path('css/attachment-preview.css')) }}">
     <script>
         (function() {
             try {
@@ -54,7 +55,7 @@
                     <span class="nav-icon">▣</span><span>{{ auth()->user()->isAdmin() ? 'Request' : 'Requests' }}</span>
                     @if(auth()->user()->isDialA())
                         @php
-                            $pendingFinishCount = \App\Models\PropertyRequest::where('assignment_type', 'dial_a')->whereNotNull('service_report_completed_at')->whereNull('completed_at')->count();
+                            $pendingFinishCount = \App\Models\PropertyRequest::where('assignment_type', 'dial_a')->where('assignment_phase', 'proceeded')->whereNotNull('service_report_completed_at')->whereNull('completed_at')->count();
                         @endphp
                         @if($pendingFinishCount > 0)
                             <span class="badge" style="background:#dc2626; color:#fff; font-size:11px; padding:2px 7px; border-radius:10px; margin-left:auto;" title="{{ $pendingFinishCount }} requests awaiting confirmation">{{ $pendingFinishCount }}</span>
@@ -168,7 +169,9 @@
     </main>
 
     <div class="sidebar-overlay" data-sidebar-toggle></div>
+    @include('partials.attachment-preview')
     <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}" defer></script>
+    <script src="{{ asset('js/attachment-preview.js') }}?v={{ filemtime(public_path('js/attachment-preview.js')) }}" defer></script>
     @if(auth()->user()->isManager())
         @include('requests.partials.pm-confirmation-modal')
     @endif

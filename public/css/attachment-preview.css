@@ -1,0 +1,28 @@
+.attachment-dialog { width: min(1000px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 14px; color: #172b42; background: #fff; box-shadow: 0 24px 80px #10243c66; font-family: Inter, Arial, sans-serif; }
+.attachment-dialog[open] { display: flex; flex-direction: column; }
+.attachment-dialog::backdrop { background: #0c1b30b8; }
+body.attachment-preview-open { overflow: hidden; }
+.attachment-dialog-header, .attachment-dialog-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; flex-shrink: 0; }
+.attachment-dialog-header { border-bottom: 1px solid #dbe5ef; }
+.attachment-dialog-header > div { min-width: 0; }
+.attachment-dialog-header small { color: #64748b; font-size: 12px; }
+.attachment-dialog-header h2 { margin: 5px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.attachment-dialog-close, .attachment-download { border: 1px solid #cbd5e1; border-radius: 7px; padding: 8px 14px; background: #fff; color: #173f70; cursor: pointer; font: inherit; font-size: 13px; text-decoration: none; }
+.attachment-dialog-close:focus-visible, .attachment-download:focus-visible, [data-attachment-open]:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+.attachment-dialog-body { min-height: 240px; overflow: auto; background: #f1f5f9; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.attachment-dialog-body > img { display: block; max-width: 100%; max-height: calc(100dvh - 210px); object-fit: contain; }
+.attachment-dialog-body > iframe { width: 100%; height: min(70dvh, 800px); border: 0; background: #fff; }
+.attachment-dialog-footer { border-top: 1px solid #dbe5ef; justify-content: flex-end; }
+.attachment-dialog [hidden] { display: none !important; }
+.attachment-fallback { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: #eef2f6; color: #64748b; text-align: center; font: 12px/1.5 Arial, sans-serif; }
+.attachment-fallback svg { width: 38px; height: 38px; flex-shrink: 0; }
+.attachment-dialog-body > .attachment-fallback { min-height: 220px; background: transparent; }
+.workflow-file-tile > .attachment-fallback { width: 100%; min-height: 91px; box-sizing: border-box; }
+.attachment-fallback.chip-img { width: 22px; height: 22px; padding: 0; flex-shrink: 0; }
+.attachment-fallback.chip-img svg { width: 18px; height: 18px; }
+.attachment-fallback.chip-img > span { display: none; }
+.attachment-preview-card[data-attachment-open] { cursor: pointer; font-family: inherit; width: 100%; }
+.attachment-preview-card > .attachment-fallback { width: 100%; box-sizing: border-box; }
+.attachment-image-display > .attachment-fallback { min-height: 220px; width: 100%; }
+@media (max-width: 600px) { .attachment-dialog-header, .attachment-dialog-footer { padding: 12px; } .attachment-dialog-body { padding: 8px; } }
+@media print { .attachment-dialog { display: none !important; } body.attachment-preview-open { overflow: visible; } .attachment-fallback { break-inside: avoid; } }

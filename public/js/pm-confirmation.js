@@ -7,20 +7,9 @@
     const error = document.getElementById('pmConfirmationError');
     const submit = document.getElementById('pmConfirmationSubmit');
     const cancel = document.getElementById('pmConfirmationCancel');
-    const usePassword = document.getElementById('pmUsePassword');
     let pendingForm = null;
     let returnFocus = null;
-    let quick = false;
     let busy = false;
-
-    function mode(useQuick) {
-        quick = useQuick;
-        document.getElementById('pmPasswordFields').hidden = quick;
-        document.getElementById('pmQuickConfirmation').hidden = !quick;
-        password.required = !quick;
-        password.disabled = quick;
-        submit.textContent = quick ? 'Confirm with one click' : 'Confirm';
-    }
 
     function open(form) {
         if (!form.reportValidity() || busy) return;
@@ -46,9 +35,8 @@
             parts.push(`Report Files: ${fileInput.files.length} file(s) selected`);
         }
         document.getElementById('pmConfirmationSummary').textContent = parts.join('\n') || 'Please confirm before saving this action.';
-        mode(dialog.dataset.quickConfirm === '1');
         dialog.showModal();
-        (quick ? submit : password).focus();
+        password.focus();
     }
 
     window.openPmConfirmation = open;
@@ -57,7 +45,6 @@
         event.preventDefault();
         open(event.target);
     });
-    usePassword.addEventListener('click', () => { mode(false); password.focus(); });
     cancel.addEventListener('click', () => { if (!busy) dialog.close(); });
     dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
     dialog.addEventListener('close', () => {
@@ -69,13 +56,11 @@
         event.preventDefault();
         if (!pendingForm || busy || !confirmation.reportValidity()) return;
         busy = true;
-        submit.disabled = cancel.disabled = usePassword.disabled = true;
+        submit.disabled = cancel.disabled = true;
         submit.textContent = 'Confirming…';
         error.hidden = true;
         const body = new FormData(pendingForm);
-        body.set('quick_confirm', quick ? '1' : '0');
-        if (!quick) body.set('current_password', password.value);
-        body.set('remember_confirmation', document.getElementById('pmRememberConfirmation').checked ? '1' : '0');
+        body.set('current_password', password.value);
         try {
             const response = await fetch(pendingForm.action, {
                 method: 'POST', credentials: 'same-origin', body,
@@ -86,23 +71,29 @@
                 error.textContent = result.errors ? Object.values(result.errors).flat().join('\n') : (result.message || 'Unable to save this action. Please try again.');
                 error.hidden = false;
                 if (result.errors?.current_password) {
-                    dialog.dataset.quickConfirm = '0';
                     password.value = '';
-                    mode(false);
                     password.focus();
                 }
                 return;
             }
             password.value = '';
-            if (result.redirect) window.location.assign(result.redirect);
-            else window.location.reload();
+            if (result.redirect) {
+                const target = new URL(result.redirect, window.location.href);
+                const current = new URL(window.location.href);
+                if (target.origin === current.origin && target.pathname === current.pathname && target.search === current.search) {
+                    window.history.replaceState(null, '', target.href);
+                    window.location.reload();
+                } else {
+                    window.location.assign(target.href);
+                }
+            } else window.location.reload();
         } catch (_) {
             error.textContent = 'Unable to confirm. Check your connection or refresh the page to sign in again.';
             error.hidden = false;
         } finally {
             busy = false;
-            submit.disabled = cancel.disabled = usePassword.disabled = false;
-            submit.textContent = quick ? 'Confirm with one click' : 'Confirm';
+            submit.disabled = cancel.disabled = false;
+            submit.textContent = 'Confirm';
         }
     });
 })();

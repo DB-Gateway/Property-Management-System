@@ -1,7 +1,7 @@
 @forelse($files as $attachment)
-    <a class="workflow-file {{ ($gallery ?? false) ? 'workflow-file-tile' : '' }}" href="{{ route('attachments.show', $attachment) }}" target="_blank" rel="noopener">
+    <a class="workflow-file {{ ($gallery ?? false) ? 'workflow-file-tile' : '' }}" href="{{ route('attachments.show', $attachment) }}" @include('partials.attachment-preview-attributes', ['attachment' => $attachment])>
         @if(($gallery ?? false) && $attachment->isImage())
-            <img src="{{ route('attachments.show', $attachment) }}" alt="{{ $attachment->original_name }}">
+            <img data-attachment-image src="{{ route('attachments.show', $attachment) }}" alt="{{ $attachment->original_name }}">
         @else
             <span class="workflow-file-icon {{ $attachment->isPdf() ? 'icon-pdf' : ($attachment->isWord() ? 'icon-word' : ($attachment->isExcel() ? 'icon-excel' : '')) }}">
                 @if($attachment->isPdf())
@@ -22,7 +22,7 @@
                 <span class="workflow-file-badge {{ $attachment->fileBadgeClass() }}">{{ $attachment->fileTypeLabel() }}</span>
                 {{ $attachment->original_name }}
             </strong>
-            <small>{{ number_format($attachment->size / 1024, 1) }} KB · Open</small>
+            <small>{{ number_format($attachment->size / 1024, 1) }} KB · Preview</small>
             @if($attachment->uploader_label)<small>c/o {{ $attachment->uploader_label }}</small>@endif
         </span>
     </a>

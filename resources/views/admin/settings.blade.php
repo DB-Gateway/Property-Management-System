@@ -10,5 +10,4 @@
     <section class="panel setting-card"><div class="setting-icon">▣</div><div><span>Request due dates</span><strong>2–14 days by priority</strong><p>Urgent: 2, High: 4, Regular: 7, Low: 14 days.</p></div></section>
     <section class="panel setting-card"><div class="setting-icon">▧</div><div><span>Attachments</span><strong>5 images · 10 MB each</strong><p>Accepted formats are JPG, PNG, and WebP.</p></div></section>
 </div>
-<section class="panel monitoring-note wide-note"><strong>Administrator monitoring policy</strong><p>System administrators can observe users, requests, directories, and audit history. Request ownership, Work Order, and Service Report controls are strictly reserved for Dial-A / PM Support (strictly image attachments).</p></section>
 @endsection
